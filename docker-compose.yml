@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:16
+    container_name: mambasplit_db
+    environment:
+      POSTGRES_DB: mambasplit
+      POSTGRES_USER: mambasplit
+      POSTGRES_PASSWORD: mambasplit
+    ports:
+      - "5432:5432"
+    volumes:
+      - mambasplit_pg:/var/lib/postgresql/data
+
+volumes:
+  mambasplit_pg:

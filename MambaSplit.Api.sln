@@ -1,0 +1,30 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MambaSplit.Api", "src\MambaSplit.Api\MambaSplit.Api.csproj", "{9115B77F-53DF-0E7E-02B5-A6D7B453B66C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MambaSplit.Api.Tests", "tests\MambaSplit.Api.Tests\MambaSplit.Api.Tests.csproj", "{2A4F584E-6E0F-400B-86D4-42FA1E969448}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9115B77F-53DF-0E7E-02B5-A6D7B453B66C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9115B77F-53DF-0E7E-02B5-A6D7B453B66C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9115B77F-53DF-0E7E-02B5-A6D7B453B66C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9115B77F-53DF-0E7E-02B5-A6D7B453B66C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2A4F584E-6E0F-400B-86D4-42FA1E969448}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2A4F584E-6E0F-400B-86D4-42FA1E969448}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2A4F584E-6E0F-400B-86D4-42FA1E969448}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2A4F584E-6E0F-400B-86D4-42FA1E969448}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {D5522FBA-4217-46F8-9D8E-10BA79C8EFCA}
+	EndGlobalSection
+EndGlobal

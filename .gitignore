@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+
+# IDE
+.vs/
+.vscode/
+
+# Logs
+*.log
+/logs/
+/api-*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local tooling scratch
+/.docker-temp/
