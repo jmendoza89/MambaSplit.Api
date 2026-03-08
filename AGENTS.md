@@ -1,6 +1,6 @@
 ﻿# AGENTS Instructions (Project)
 
-Project-level instructions for coding agents in `mambasplit-dotnet-api`.
+Project-level instructions for coding agents in `MambaSplit.Api`.
 
 ## Parent Instructions
 
