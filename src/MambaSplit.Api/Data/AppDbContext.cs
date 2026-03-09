@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<InviteEntity> Invites => Set<InviteEntity>();
     public DbSet<ExpenseEntity> Expenses => Set<ExpenseEntity>();
     public DbSet<ExpenseSplitEntity> ExpenseSplits => Set<ExpenseSplitEntity>();
+    public DbSet<SettlementEntity> Settlements => Set<SettlementEntity>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

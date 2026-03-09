@@ -121,6 +121,7 @@ builder.Services.AddScoped<IGoogleTokenVerifier, GoogleIdTokenVerifierService>()
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<GroupService>();
 builder.Services.AddScoped<ExpenseService>();
+builder.Services.AddScoped<SettlementService>();
 
 var app = builder.Build();
 
