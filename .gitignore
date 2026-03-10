@@ -21,3 +21,4 @@ Thumbs.db
 
 # Local tooling scratch
 /.docker-temp/
+/artifacts/tempbuild/
