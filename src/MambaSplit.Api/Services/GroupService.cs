@@ -17,6 +17,8 @@ public class GroupService
 
     public async Task<GroupEntity> CreateGroupAsync(Guid creatorUserId, string name, CancellationToken ct = default)
     {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
         var group = new GroupEntity
         {
             Id = Guid.NewGuid(),
@@ -25,6 +27,7 @@ public class GroupService
             CreatedAt = DateTimeOffset.UtcNow,
         };
         _db.Groups.Add(group);
+        await _db.SaveChangesAsync(ct);
 
         _db.GroupMembers.Add(new GroupMemberEntity
         {
@@ -36,6 +39,7 @@ public class GroupService
         });
 
         await _db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return group;
     }
 
@@ -81,6 +85,27 @@ public class GroupService
             .Take(50)
             .ToList();
         var allExpenseIds = allGroupExpenses.Select(e => e.Id).ToList();
+        var settlementExpenseLinks = allExpenseIds.Count == 0
+            ? new List<SettlementExpenseEntity>()
+            : await _db.SettlementExpenses
+                .Where(se => allExpenseIds.Contains(se.ExpenseId))
+                .ToListAsync(ct);
+        var settlementIdByExpenseId = settlementExpenseLinks
+            .GroupBy(se => se.ExpenseId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.SettlementId).Select(x => x.SettlementId).First());
+        var expenseIdsBySettlementId = settlementExpenseLinks
+            .GroupBy(se => se.SettlementId)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.ExpenseId).ToList());
+
+        var allGroupSettlements = await _db.Settlements
+            .Where(s => s.GroupId == groupId)
+            .ToListAsync(ct);
+        var recentGroupSettlements = allGroupSettlements
+            .OrderByDescending(s => s.CreatedAt)
+            .Take(50)
+            .ToList();
 
         var splitRows = allExpenseIds.Count == 0
             ? new List<ExpenseSplitEntity>()
@@ -104,6 +129,18 @@ public class GroupService
                         "net balance for split");
                 }
             }
+        }
+
+        foreach (var settlement in allGroupSettlements)
+        {
+            netByUserId[settlement.FromUserId] = CheckedAdd(
+                netByUserId[settlement.FromUserId],
+                settlement.AmountCents,
+                "net balance for settlement payer");
+            netByUserId[settlement.ToUserId] = CheckedSubtract(
+                netByUserId[settlement.ToUserId],
+                settlement.AmountCents,
+                "net balance for settlement receiver");
         }
 
         var memberInfos = groupMembers
@@ -131,6 +168,7 @@ public class GroupService
                 .OrderBy(s => s.UserId.ToString())
                 .Select(s => new ExpenseSplitInfo(s.UserId, s.AmountOwedCents))
                 .ToList();
+            var settlementId = settlementIdByExpenseId.TryGetValue(expense.Id, out var sid) ? (Guid?)sid : null;
 
             return new ExpenseInfo(
                 expense.Id,
@@ -140,16 +178,48 @@ public class GroupService
                 expense.CreatedByUserId,
                 expense.ReversalOfExpenseId,
                 expense.CreatedAt,
+                settlementId,
                 mappedSplits);
         }).ToList();
 
+        var settlementInfos = recentGroupSettlements.Select(settlement =>
+        {
+            if (!usersById.TryGetValue(settlement.FromUserId, out var fromUser))
+            {
+                throw new ResourceNotFoundException("User", settlement.FromUserId.ToString());
+            }
+
+            if (!usersById.TryGetValue(settlement.ToUserId, out var toUser))
+            {
+                throw new ResourceNotFoundException("User", settlement.ToUserId.ToString());
+            }
+
+            return new SettlementInfo(
+                settlement.Id,
+                settlement.GroupId,
+                settlement.FromUserId,
+                fromUser.DisplayName,
+                settlement.ToUserId,
+                toUser.DisplayName,
+                settlement.AmountCents,
+                settlement.Note,
+                settlement.CreatedAt,
+                expenseIdsBySettlementId.GetValueOrDefault(settlement.Id, []));
+        }).ToList();
+
+        var settlementSuggestions = BuildSettlementSuggestions(memberInfos);
         var totalExpenseAmountCents = CheckedSum(allGroupExpenses.Select(e => e.AmountCents), "total expense amount");
+        var totalSettlementAmountCents = CheckedSum(
+            allGroupSettlements.Select(s => s.AmountCents),
+            "total settlement amount");
         return new GroupDetails(
             new GroupInfo(group.Id, group.Name, group.CreatedBy, group.CreatedAt),
             new MeInfo(userId, requesterMembership.Role, netByUserId.GetValueOrDefault(userId, 0L)),
             memberInfos,
             expenseInfos,
-            new Summary(allGroupExpenses.Count, totalExpenseAmountCents));
+            settlementInfos,
+            settlementSuggestions,
+            new Summary(allGroupExpenses.Count, totalExpenseAmountCents, allGroupSettlements.Count, totalSettlementAmountCents));
     }
 
     public async Task DeleteGroupAsync(Guid groupId, Guid actorUserId, CancellationToken ct = default)
@@ -439,6 +509,57 @@ public class GroupService
         return total;
     }
 
+    private static List<SettlementSuggestion> BuildSettlementSuggestions(List<MemberInfo> memberInfos)
+    {
+        var creditors = memberInfos
+            .Where(m => m.NetBalanceCents > 0)
+            .Select(m => new BalanceNode(m.UserId, m.DisplayName, m.NetBalanceCents))
+            .OrderBy(m => m.UserId.ToString())
+            .ToList();
+        var debtors = memberInfos
+            .Where(m => m.NetBalanceCents < 0)
+            .Select(m => new BalanceNode(m.UserId, m.DisplayName, checked(-m.NetBalanceCents)))
+            .OrderBy(m => m.UserId.ToString())
+            .ToList();
+
+        var suggestions = new List<SettlementSuggestion>();
+        var creditorIdx = 0;
+        var debtorIdx = 0;
+
+        while (creditorIdx < creditors.Count && debtorIdx < debtors.Count)
+        {
+            var creditor = creditors[creditorIdx];
+            var debtor = debtors[debtorIdx];
+            var amount = Math.Min(creditor.RemainingCents, debtor.RemainingCents);
+            if (amount <= 0)
+            {
+                break;
+            }
+
+            suggestions.Add(new SettlementSuggestion(
+                debtor.UserId,
+                debtor.DisplayName,
+                creditor.UserId,
+                creditor.DisplayName,
+                amount));
+
+            creditor.RemainingCents -= amount;
+            debtor.RemainingCents -= amount;
+
+            if (creditor.RemainingCents == 0)
+            {
+                creditorIdx++;
+            }
+
+            if (debtor.RemainingCents == 0)
+            {
+                debtorIdx++;
+            }
+        }
+
+        return suggestions;
+    }
+
     public record CreatedInvite(string Token, string Email, DateTimeOffset ExpiresAt);
     public record PendingInvite(Guid Id, Guid GroupId, string GroupName, string Email, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt);
     public record GroupDetails(
@@ -446,6 +567,8 @@ public class GroupService
         MeInfo Me,
         List<MemberInfo> Members,
         List<ExpenseInfo> Expenses,
+        List<SettlementInfo> Settlements,
+        List<SettlementSuggestion> SettlementSuggestions,
         Summary Summary);
     public record GroupInfo(Guid Id, string Name, Guid CreatedBy, DateTimeOffset CreatedAt);
     public record MeInfo(Guid UserId, Role Role, long NetBalanceCents);
@@ -458,7 +581,39 @@ public class GroupService
         Guid CreatedByUserId,
         Guid? ReversalOfExpenseId,
         DateTimeOffset CreatedAt,
+        Guid? SettlementId,
         List<ExpenseSplitInfo> Splits);
+    public record SettlementInfo(
+        Guid Id,
+        Guid GroupId,
+        Guid FromUserId,
+        string FromUserName,
+        Guid ToUserId,
+        string ToUserName,
+        long AmountCents,
+        string? Note,
+        DateTimeOffset CreatedAt,
+        List<Guid> ExpenseIds);
+    public record SettlementSuggestion(
+        Guid FromUserId,
+        string FromUserName,
+        Guid ToUserId,
+        string ToUserName,
+        long AmountCents);
     public record ExpenseSplitInfo(Guid UserId, long AmountOwedCents);
-    public record Summary(int ExpenseCount, long TotalExpenseAmountCents);
+    public record Summary(int ExpenseCount, long TotalExpenseAmountCents, int SettlementCount, long TotalSettlementAmountCents);
+
+    private sealed class BalanceNode
+    {
+        public BalanceNode(Guid userId, string displayName, long remainingCents)
+        {
+            UserId = userId;
+            DisplayName = displayName;
+            RemainingCents = remainingCents;
+        }
+
+        public Guid UserId { get; }
+        public string DisplayName { get; }
+        public long RemainingCents { get; set; }
+    }
 }

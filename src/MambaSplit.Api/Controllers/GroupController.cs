@@ -89,6 +89,8 @@ public record GroupDetailsDto(
     MeInfoDto Me,
     List<MemberInfoDto> Members,
     List<ExpenseInfoDto> Expenses,
+    List<SettlementInfoDto> Settlements,
+    List<SettlementSuggestionDto> SettlementSuggestions,
     SummaryDto Summary)
 {
     public static GroupDetailsDto From(GroupService.GroupDetails details) => new(
@@ -96,6 +98,8 @@ public record GroupDetailsDto(
         MeInfoDto.From(details.Me),
         details.Members.Select(MemberInfoDto.From).ToList(),
         details.Expenses.Select(ExpenseInfoDto.From).ToList(),
+        details.Settlements.Select(SettlementInfoDto.From).ToList(),
+        details.SettlementSuggestions.Select(SettlementSuggestionDto.From).ToList(),
         SummaryDto.From(details.Summary));
 }
 
@@ -130,6 +134,8 @@ public record ExpenseInfoDto(
     string CreatedByUserId,
     string? ReversalOfExpenseId,
     string CreatedAt,
+    string? SettlementId,
+    bool IsSettled,
     List<ExpenseSplitInfoDto> Splits)
 {
     public static ExpenseInfoDto From(GroupService.ExpenseInfo expense) => new(
@@ -140,6 +146,8 @@ public record ExpenseInfoDto(
         expense.CreatedByUserId.ToString(),
         expense.ReversalOfExpenseId?.ToString(),
         expense.CreatedAt.ToString("O"),
+        expense.SettlementId?.ToString(),
+        expense.SettlementId is not null,
         expense.Splits.Select(ExpenseSplitInfoDto.From).ToList());
 }
 
@@ -149,8 +157,58 @@ public record ExpenseSplitInfoDto(string UserId, long AmountOwedCents)
         new(split.UserId.ToString(), split.AmountOwedCents);
 }
 
-public record SummaryDto(int ExpenseCount, long TotalExpenseAmountCents)
+public record SettlementInfoDto(
+    string Id,
+    string GroupId,
+    string FromUserId,
+    string FromUserName,
+    string ToUserId,
+    string ToUserName,
+    long AmountCents,
+    string? Note,
+    string SettledAt,
+    List<string> ExpenseIds)
+{
+    public static SettlementInfoDto From(GroupService.SettlementInfo settlement) =>
+        new(
+            settlement.Id.ToString(),
+            settlement.GroupId.ToString(),
+            settlement.FromUserId.ToString(),
+            settlement.FromUserName,
+            settlement.ToUserId.ToString(),
+            settlement.ToUserName,
+            settlement.AmountCents,
+            settlement.Note,
+            settlement.CreatedAt.ToString("O"),
+            settlement.ExpenseIds.Select(id => id.ToString()).ToList());
+}
+
+public record SettlementSuggestionDto(
+    string FromUserId,
+    string FromUserName,
+    string ToUserId,
+    string ToUserName,
+    long AmountCents)
+{
+    public static SettlementSuggestionDto From(GroupService.SettlementSuggestion suggestion) =>
+        new(
+            suggestion.FromUserId.ToString(),
+            suggestion.FromUserName,
+            suggestion.ToUserId.ToString(),
+            suggestion.ToUserName,
+            suggestion.AmountCents);
+}
+
+public record SummaryDto(
+    int ExpenseCount,
+    long TotalExpenseAmountCents,
+    int SettlementCount,
+    long TotalSettlementAmountCents)
 {
     public static SummaryDto From(GroupService.Summary summary) =>
-        new(summary.ExpenseCount, summary.TotalExpenseAmountCents);
+        new(
+            summary.ExpenseCount,
+            summary.TotalExpenseAmountCents,
+            summary.SettlementCount,
+            summary.TotalSettlementAmountCents);
 }
