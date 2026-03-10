@@ -1,7 +1,8 @@
-using MambaSplit.Api.Contracts;
+using System.ComponentModel.DataAnnotations;
 using MambaSplit.Api.Extensions;
 using MambaSplit.Api.Exceptions;
 using MambaSplit.Api.Services;
+using MambaSplit.Api.Validation;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MambaSplit.Api.Controllers;
@@ -17,9 +18,6 @@ public class SettlementsController : ControllerBase
         _settlementService = settlementService;
     }
 
-    /// <summary>
-    /// Creates a new settlement (payment between users) in a group.
-    /// </summary>
     [HttpPost("groups/{groupId}/settlements")]
     public async Task<ActionResult<CreateSettlementResponse>> CreateSettlement(
         string groupId,
@@ -27,26 +25,30 @@ public class SettlementsController : ControllerBase
         CancellationToken ct)
     {
         var gid = ParseGuid(groupId, "groupId");
+        var actorUserId = User.UserId();
         var fromUserId = ParseGuid(request.FromUserId, "fromUserId");
         var toUserId = ParseGuid(request.ToUserId, "toUserId");
+        var settledAt = ParseDateTimeOffset(request.SettledAt, "settledAt");
 
-        var settlementId = await _settlementService.CreateSettlementAsync(
+        var created = await _settlementService.CreateSettlementAsync(
             gid,
+            actorUserId,
             fromUserId,
             toUserId,
             request.AmountCents,
+            (request.ExpenseIds ?? [])
+                .Select(x => ParseGuid(x, "expenseIds"))
+                .ToList(),
             request.Note,
+            settledAt,
             ct);
 
         return CreatedAtAction(
             nameof(GetSettlement),
-            new { settlementId = settlementId.ToString() },
-            new CreateSettlementResponse { SettlementId = settlementId.ToString() });
+            new { settlementId = created.Id.ToString() },
+            new CreateSettlementResponse(created.Id.ToString(), SettlementDetailsResponse.From(created)));
     }
 
-    /// <summary>
-    /// Lists all settlements for a group (requires group membership).
-    /// </summary>
     [HttpGet("groups/{groupId}/settlements")]
     public async Task<ActionResult<ListSettlementsResponse>> ListGroupSettlements(
         string groupId,
@@ -54,43 +56,94 @@ public class SettlementsController : ControllerBase
     {
         var gid = ParseGuid(groupId, "groupId");
         var userId = User.UserId();
-
         var response = await _settlementService.ListGroupSettlementsAsync(gid, userId, ct);
-        return Ok(response);
+        return Ok(new ListSettlementsResponse(
+            response.Settlements.Select(SettlementDetailsResponse.From).ToList()));
     }
 
-    /// <summary>
-    /// Gets details of a specific settlement by ID.
-    /// </summary>
     [HttpGet("settlements/{settlementId}")]
     public async Task<ActionResult<SettlementDetailsResponse>> GetSettlement(
         string settlementId,
         CancellationToken ct)
     {
         var sid = ParseGuid(settlementId, "settlementId");
-        var response = await _settlementService.GetSettlementAsync(sid, ct);
-        return Ok(response);
+        var actorUserId = User.UserId();
+        var response = await _settlementService.GetSettlementAsync(sid, actorUserId, ct);
+        return Ok(SettlementDetailsResponse.From(response));
     }
 
-    /// <summary>
-    /// Lists all settlements involving the authenticated user.
-    /// </summary>
     [HttpGet("users/{userId}/settlements")]
     public async Task<ActionResult<ListSettlementsResponse>> ListUserSettlements(
         string userId,
         CancellationToken ct)
     {
         var uid = ParseGuid(userId, "userId");
-        var response = await _settlementService.ListUserSettlementsAsync(uid, ct);
-        return Ok(response);
+        var actorUserId = User.UserId();
+        var response = await _settlementService.ListUserSettlementsAsync(uid, actorUserId, ct);
+        return Ok(new ListSettlementsResponse(
+            response.Settlements.Select(SettlementDetailsResponse.From).ToList()));
     }
 
     private static Guid ParseGuid(string input, string paramName)
     {
         if (!Guid.TryParse(input, out var guid))
         {
-            throw new ValidationException($"{paramName} must be a valid GUID");
+            throw new MambaSplit.Api.Exceptions.ValidationException($"{paramName} must be a valid GUID");
         }
+
         return guid;
     }
+
+    private static DateTimeOffset? ParseDateTimeOffset(string? value, string paramName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!DateTimeOffset.TryParse(value, out var parsed))
+        {
+            throw new MambaSplit.Api.Exceptions.ValidationException($"{paramName} must be a valid ISO-8601 date/time");
+        }
+
+        return parsed;
+    }
+}
+
+public record CreateSettlementRequest(
+    [Required, NotBlank] string FromUserId,
+    [Required, NotBlank] string ToUserId,
+    [Range(1, long.MaxValue)] long AmountCents,
+    List<string>? ExpenseIds,
+    [MaxLength(500)] string? Note,
+    string? SettledAt);
+
+public record CreateSettlementResponse(string SettlementId, SettlementDetailsResponse Settlement);
+
+public record ListSettlementsResponse(List<SettlementDetailsResponse> Settlements);
+
+public record SettlementDetailsResponse(
+    string Id,
+    string GroupId,
+    string FromUserId,
+    string FromUserName,
+    string ToUserId,
+    string ToUserName,
+    long AmountCents,
+    string? Note,
+    string SettledAt,
+    List<string> ExpenseIds)
+{
+    public static SettlementDetailsResponse From(SettlementService.SettlementDetails settlement) =>
+        new(
+            settlement.Id.ToString(),
+            settlement.GroupId.ToString(),
+            settlement.FromUserId.ToString(),
+            settlement.FromUserName,
+            settlement.ToUserId.ToString(),
+            settlement.ToUserName,
+            settlement.AmountCents,
+            settlement.Note,
+            settlement.SettledAt.ToString("O"),
+            settlement.ExpenseIds.Select(id => id.ToString()).ToList());
 }

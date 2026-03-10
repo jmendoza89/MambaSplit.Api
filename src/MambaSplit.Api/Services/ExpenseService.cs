@@ -2,6 +2,7 @@ using MambaSplit.Api.Data;
 using MambaSplit.Api.Domain;
 using MambaSplit.Api.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace MambaSplit.Api.Services;
 
@@ -210,6 +211,13 @@ public class ExpenseService
             throw new ConflictException("Expense already reversed");
         }
 
+        var isSettlementLinked = await _db.SettlementExpenses
+            .AnyAsync(se => se.ExpenseId == expenseId, ct);
+        if (isSettlementLinked)
+        {
+            throw new ConflictException("Expense is settled and cannot be deleted");
+        }
+
         var splits = await _db.ExpenseSplits
             .Where(s => s.ExpenseId == expenseId)
             .ToListAsync(ct);
@@ -238,7 +246,18 @@ public class ExpenseService
             });
         }
 
-        await _db.SaveChangesAsync(ct);
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsReversalConflict(ex))
+        {
+            throw new ConflictException("Expense already reversed");
+        }
+        catch (DbUpdateException ex) when (IsSettlementLinkConflict(ex))
+        {
+            throw new ConflictException("Expense is settled and cannot be deleted");
+        }
     }
 
     private static void EnforceDelegatedPayerPolicy(Guid actorUserId, Guid payerUserId)
@@ -343,6 +362,28 @@ public class ExpenseService
             ? originalDescription
             : originalDescription[..remaining];
         return prefix + trimmedOriginal;
+    }
+
+    private static bool IsReversalConflict(DbUpdateException ex)
+    {
+        if (ex.InnerException is not PostgresException pg)
+        {
+            return false;
+        }
+
+        return pg.SqlState == PostgresErrorCodes.UniqueViolation &&
+               string.Equals(pg.ConstraintName, "ix_expenses_reversal_of_expense_id", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSettlementLinkConflict(DbUpdateException ex)
+    {
+        if (ex.InnerException is not PostgresException pg)
+        {
+            return false;
+        }
+
+        return pg.SqlState == PostgresErrorCodes.ForeignKeyViolation &&
+               string.Equals(pg.ConstraintName, "fk_settlement_expenses_expenses_expense_id", StringComparison.OrdinalIgnoreCase);
     }
 }
 

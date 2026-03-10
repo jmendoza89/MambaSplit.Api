@@ -228,6 +228,9 @@ public class CreateSettlementRequest
     
     /// <summary>Amount in cents (e.g., 5300 = $53.00)</summary>
     public long AmountCents { get; set; }
+
+    /// <summary>Expense rows that will be marked settled by this settlement</summary>
+    public List<string> ExpenseIds { get; set; }
     
     /// <summary>Optional note (max 500 characters)</summary>
     public string? Note { get; set; }
@@ -241,13 +244,15 @@ public class CreateSettlementRequest
 public class SettlementDetailsResponse
 {
     public string Id { get; set; }
+    public string GroupId { get; set; }
     public string FromUserId { get; set; }
     public string FromUserName { get; set; }
     public string ToUserId { get; set; }
     public string ToUserName { get; set; }
     public long AmountCents { get; set; }
     public string? Note { get; set; }
-    public string CreatedAt { get; set; }  // ISO 8601 format
+    public string SettledAt { get; set; }  // ISO 8601 format
+    public List<string> ExpenseIds { get; set; }
 }
 ```
 
@@ -273,9 +278,10 @@ public class ListSettlementsResponse
 2. **User Validation**: From and To users cannot be the same user
 3. **Group Membership**: Both users must be members of the group
 4. **Note Length**: Optional note cannot exceed 500 characters
-5. **Immutability**: Settlements cannot be edited or deleted (only created)
-6. **Reversal**: To reverse a settlement, create a new settlement with from/to swapped
-7. **Non-exclusive**: Recording settlements does NOT close the group or affect expense tracking
+5. **Expense Selection Required**: At least one expense ID is required
+6. **Strict Amount Match**: `amountCents` must equal the sum of selected expenses
+7. **Immutability In Group Frontend**: Settlements are create/list only in the normal group UI
+8. **Non-exclusive**: Recording settlements does NOT close the group or affect expense tracking
 
 ## Frontend Integration Notes
 
@@ -288,3 +294,10 @@ public class ListSettlementsResponse
 3. **Timestamps**: All timestamps are in ISO 8601 format (e.g., "2026-03-09T18:30:45.123456Z")
 
 4. **URL Paths**: All IDs in the URL and request body are string representations of UUIDs
+
+## Admin Backlog Note
+
+- Future admin-portal-only endpoint exists for settlement reset:
+  - `DELETE /api/v1/admin/groups/{groupId}/settlements`
+  - Required header: `X-Admin-Portal-Token`
+- Do not implement this action in the regular group/member frontend.

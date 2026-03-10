@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore MambaSplit.Api.sln
+
+      - name: Build
+        run: dotnet build MambaSplit.Api.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test MambaSplit.Api.sln --configuration Release --no-build --nologo

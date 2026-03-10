@@ -1,0 +1,47 @@
+{
+  "task": "Wire settlement UX to backend contract and implement collapse behavior",
+  "sourceOfTruth": "C:\\MambaSplit\\MambaSplit.Api\\SETTLEMENTS_FRONTEND_CONTRACT.json",
+  "mustReadContractFirst": true,
+  "scope": {
+    "implement": [
+      "Create settlement submit flow with expenseIds selection.",
+      "Client-side validation: amountCents equals sum of selected expenses.",
+      "Group details wiring for settlementId/isSettled and settlement groups.",
+      "Collapsed settled-expense UI grouped by settlementId.",
+      "List and detail settlement views where applicable."
+    ],
+    "doNotImplement": [
+      "No delete/reset/reverse settlement action in group/member frontend."
+    ],
+    "backlogOnly": [
+      "Admin portal settlement reset endpoint: DELETE /api/v1/admin/groups/{groupId}/settlements with X-Admin-Portal-Token."
+    ]
+  },
+  "collapseCardGuidance": {
+    "goal": "After settlement save, settled expenses collapse into a settlement card/group.",
+    "groupingKey": "expense.settlementId",
+    "collapsedHeader": [
+      "fromUserName -> toUserName",
+      "settlement amount",
+      "settled date",
+      "count of linked expenses"
+    ],
+    "expandedBody": [
+      "Expense description",
+      "Amount",
+      "Created date"
+    ],
+    "interaction": [
+      "Collapsed by default after save",
+      "Accessible toggle (keyboard + aria-expanded)"
+    ],
+    "uiLibraryResearchAllowed": true,
+    "selectionInstruction": "Pick the most suitable visual element (accordion/grouped cards/timeline cluster) based on readability and interaction quality."
+  },
+  "acceptanceCriteria": [
+    "Request/response payloads strictly match contract file.",
+    "Settlement creation blocked if selected sum mismatches amountCents.",
+    "Settled expenses collapse correctly and can be expanded.",
+    "No settlement delete/reset controls shown in group frontend."
+  ]
+}
