@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: mambasplit
       POSTGRES_USER: mambasplit
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mambasplit}
     ports:
       - "5432:5432"
     volumes:
