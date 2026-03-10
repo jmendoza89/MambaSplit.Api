@@ -1,0 +1,33 @@
+name: Restrict Main Merges
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+
+permissions:
+  contents: read
+
+jobs:
+  allow-only-develop:
+    name: Allow only develop -> main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if source branch is not develop
+        run: |
+          BASE="${{ github.event.pull_request.base.ref }}"
+          HEAD="${{ github.event.pull_request.head.ref }}"
+
+          echo "Base branch: ${BASE}"
+          echo "Head branch: ${HEAD}"
+
+          if [ "${HEAD}" != "develop" ]; then
+            echo "Only pull requests from 'develop' can target '${BASE}'."
+            exit 1
+          fi

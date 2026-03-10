@@ -1,0 +1,684 @@
+<!doctype html>
+<html><head><meta charset="utf-8" />
+<title>MambaSplit Scenario Report</title>
+<style>body{font-family:Segoe UI,Arial,sans-serif;margin:20px;color:#1f2937}h1,h2{margin:0 0 12px}section{margin:22px 0}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #d1d5db;padding:6px 8px;text-align:left}th{background:#f3f4f6}.kpi{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:12px}.card{border:1px solid #d1d5db;border-radius:8px;padding:10px;background:#f9fafb}.bars{display:grid;gap:10px}.bar-row{display:grid;grid-template-columns:180px 1fr 90px;gap:10px;align-items:center}.bar{height:14px;border-radius:7px;background:#e5e7eb;overflow:hidden}.fill-exp{height:100%;background:#0f766e}.fill-set{height:100%;background:#1d4ed8}</style>
+</head><body>
+<h1>MambaSplit Scenario Report</h1>
+<p>Generated UTC: 2026-03-09T03:23:30.3434188+00:00</p>
+<section><h2>Overview</h2><div class="kpi">
+<div class="card"><b>Total Users</b><div>8</div></div>
+<div class="card"><b>Total Groups</b><div>2</div></div>
+<div class="card"><b>Total Expenses</b><div>30</div></div>
+<div class="card"><b>Total Settlements</b><div>2</div></div>
+</div></section>
+<section><h2>Scenario Steps</h2><ol>
+<li>Created Scenario Group A and Scenario Group B.</li>
+<li>Invited and accepted group members.</li>
+<li>Created 12 equal-split expenses in Group A.</li>
+<li>Created 8 exact-split expenses in Group A.</li>
+<li>Created 10 equal-split expenses in Group B.</li>
+<li>Created full-coverage settlements for both groups (amount equals sum of selected expenses).</li>
+<li>Admin reset settlements for Group A (deleted=1, releasedExpenses=20).</li>
+<li>Re-settled all Group A expenses after admin reset.</li>
+</ol></section>
+<section><h2>Expense Totals By Group</h2><div class="bars">
+<div class="bar-row"><div>Scenario Group A</div><div class="bar"><div class="fill-exp" style="width:100%"></div></div><div>30662</div></div>
+<div class="bar-row"><div>Scenario Group B</div><div class="bar"><div class="fill-exp" style="width:37%"></div></div><div>11250</div></div>
+</div></section>
+<section><h2>Settlement Totals By Group</h2><div class="bars">
+<div class="bar-row"><div>Scenario Group A</div><div class="bar"><div class="fill-set" style="width:100%"></div></div><div>30662</div></div>
+<div class="bar-row"><div>Scenario Group B</div><div class="bar"><div class="fill-set" style="width:37%"></div></div><div>11250</div></div>
+</div></section>
+<section><h2>Summary By Group</h2>
+<table><thead><tr><th>group_id</th><th>group_name</th><th>expense_count</th><th>expense_total_cents</th><th>settlement_count</th><th>settlement_total_cents</th></tr></thead><tbody>
+<tr><td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td><td>Scenario Group A</td><td>20</td><td>30662</td><td>1</td><td>30662</td></tr>
+<tr><td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td><td>Scenario Group B</td><td>10</td><td>11250</td><td>1</td><td>11250</td></tr>
+</tbody></table></section>
+<section><h2>Users</h2><table><thead><tr>
+<th>id</th>
+<th>email</th>
+<th>display_name</th>
+<th>created_at</th>
+</tr></thead><tbody>
+<tr>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>scenario_ed53803440b44af2b713ae5d5874575d@example.com</td>
+<td>Scenario User 1</td>
+<td>3/9/2026 3:23:29 AM +00:00</td>
+</tr>
+<tr>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>scenario_bc8624b07225493886fef440be68c317@example.com</td>
+<td>Scenario User 2</td>
+<td>3/9/2026 3:23:29 AM +00:00</td>
+</tr>
+<tr>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>scenario_900923e85af54585a59d9bbe2096c5ed@example.com</td>
+<td>Scenario User 3</td>
+<td>3/9/2026 3:23:29 AM +00:00</td>
+</tr>
+<tr>
+<td>c6fc704d-eeaa-4a6f-a3da-33d23670e15b</td>
+<td>scenario_1b5ac4a01ce34032935bdc1b1cae2d40@example.com</td>
+<td>Scenario User 4</td>
+<td>3/9/2026 3:23:29 AM +00:00</td>
+</tr>
+<tr>
+<td>62e14f65-fcb1-4034-acfd-15f247e24805</td>
+<td>scenario_802d774bd9ad49c686f80c376d991252@example.com</td>
+<td>Scenario User 5</td>
+<td>3/9/2026 3:23:29 AM +00:00</td>
+</tr>
+<tr>
+<td>c69848de-9aca-4807-98cf-6c0ae2296a11</td>
+<td>scenario_274ef583b63e4614a3e898d91c2c4bbc@example.com</td>
+<td>Scenario User 6</td>
+<td>3/9/2026 3:23:29 AM +00:00</td>
+</tr>
+<tr>
+<td>b7571f8a-2a96-45cb-968b-b6db6692ba74</td>
+<td>scenario_f37022cd2ac44d12af8d494d28ccc81a@example.com</td>
+<td>Scenario User 7</td>
+<td>3/9/2026 3:23:29 AM +00:00</td>
+</tr>
+<tr>
+<td>478c8522-a25b-454d-848e-a73857f8b74a</td>
+<td>scenario_99c2f3ac032d4de9b69371243b2ad7f5@example.com</td>
+<td>Scenario User 8</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+</tbody></table></section>
+<section><h2>Groups</h2><table><thead><tr>
+<th>id</th>
+<th>name</th>
+<th>created_by</th>
+<th>created_at</th>
+</tr></thead><tbody>
+<tr>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>Scenario Group A</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>Scenario Group B</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+</tbody></table></section>
+<section><h2>GroupMembers</h2><table><thead><tr>
+<th>id</th>
+<th>group_id</th>
+<th>user_id</th>
+<th>role</th>
+<th>joined_at</th>
+</tr></thead><tbody>
+<tr>
+<td>f1941050-4cd6-4612-aa1a-91e926276f5a</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>OWNER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>f826e22a-8693-48b1-9845-97b2c300141b</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>OWNER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>e6114ab6-f552-4f38-99b2-5fb49c55e50d</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>040de07a-4c4d-4a49-9872-1d627373a7bd</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>c6fc704d-eeaa-4a6f-a3da-33d23670e15b</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>eda0261b-8968-4f9c-abd8-6663ad202a10</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>62e14f65-fcb1-4034-acfd-15f247e24805</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>8da20324-d94e-49dd-b196-c41680ea110e</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>c69848de-9aca-4807-98cf-6c0ae2296a11</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>e7b2b9d8-ece3-487b-8432-69de87d97b8b</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>ee06eaf2-b872-405e-b2f1-7c9d17e1a102</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>c6fc704d-eeaa-4a6f-a3da-33d23670e15b</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>cbe09ef9-3ac7-4c61-b219-63da3feef102</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>b7571f8a-2a96-45cb-968b-b6db6692ba74</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>a2d0d670-2f2b-4f4b-8b28-e2c82af5ce0c</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>478c8522-a25b-454d-848e-a73857f8b74a</td>
+<td>MEMBER</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+</tbody></table></section>
+<section><h2>Expenses</h2><table><thead><tr>
+<th>id</th>
+<th>group_id</th>
+<th>payer_user_id</th>
+<th>created_by_user_id</th>
+<th>description</th>
+<th>amount_cents</th>
+<th>reversal_of_expense_id</th>
+<th>created_at</th>
+</tr></thead><tbody>
+<tr>
+<td>f465c1f0-c8f8-46c5-a7d6-63613d306d57</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>478c8522-a25b-454d-848e-a73857f8b74a</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 10</td>
+<td>1350</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>a01e05af-4ea5-4422-8169-d1abee90389e</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>b7571f8a-2a96-45cb-968b-b6db6692ba74</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 9</td>
+<td>1300</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>130a8145-e85a-4385-81f6-b74e4a161c39</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>c6fc704d-eeaa-4a6f-a3da-33d23670e15b</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 8</td>
+<td>1250</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>0d69c4b6-8ed5-4d68-824d-97f07afb6f72</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 7</td>
+<td>1200</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>41cde1e6-8c4e-441c-b270-3330e9562dde</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 6</td>
+<td>1150</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>d02eb31c-469c-418b-aa52-be9a5ed51973</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>478c8522-a25b-454d-848e-a73857f8b74a</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 5</td>
+<td>1100</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>f207ad03-c245-457d-89d3-63ba448a6f25</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>b7571f8a-2a96-45cb-968b-b6db6692ba74</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 4</td>
+<td>1050</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>593af2d3-f375-47fe-a0c9-736ce7f61e3d</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>c6fc704d-eeaa-4a6f-a3da-33d23670e15b</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 3</td>
+<td>1000</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>55675835-0462-45bd-a3a0-c1bba2968874</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 2</td>
+<td>950</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>4302f16d-58b7-4c12-aa19-d2d4a3898ae0</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>GB Equal 1</td>
+<td>900</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>ceb98556-944d-40b4-a788-653247045082</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 8</td>
+<td>1428</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>e27160b0-f5a3-42fa-aa0b-6deac36fe564</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 7</td>
+<td>1424</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>90d069e6-b9f6-4340-94f2-36b0f62eac58</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 6</td>
+<td>1420</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>bf9f6afe-ef6e-4aa8-9789-b73f28830a1d</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 5</td>
+<td>1416</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>0c29675b-3695-44b2-8f64-c6c6cb03789c</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 4</td>
+<td>1412</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>93d28e8e-6687-45aa-bebc-3641c0a8a4fc</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 3</td>
+<td>1408</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>40e11581-acd2-4d42-8a83-db0d322db001</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 2</td>
+<td>1404</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>4762b20e-373f-4f0e-b006-985895f96083</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>GA Exact 1</td>
+<td>1400</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>5e3b3fc9-81f0-4d42-88bd-5e05647c1e64</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 12</td>
+<td>2025</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>17cb1e0f-a6ae-427d-8407-622a5eabc5ec</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 11</td>
+<td>1950</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>d6bfeb50-024e-4bd1-8302-e740b5d48d8a</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>c69848de-9aca-4807-98cf-6c0ae2296a11</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 10</td>
+<td>1875</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>5b251c82-e167-43d1-a040-ff427fb70dd2</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>62e14f65-fcb1-4034-acfd-15f247e24805</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 9</td>
+<td>1800</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>969012e2-acbe-4d1e-87ac-ed77e5e1f719</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>c6fc704d-eeaa-4a6f-a3da-33d23670e15b</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 8</td>
+<td>1725</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>bf7b5637-64e0-4e25-bf26-db0feb3d9463</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 7</td>
+<td>1650</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>498d6541-f2d5-4536-b00d-7b4a39b20f63</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 6</td>
+<td>1575</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>3afc487c-5674-49d0-be0c-69ca4c3dbac9</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>c69848de-9aca-4807-98cf-6c0ae2296a11</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 5</td>
+<td>1500</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>a0d3186a-23d1-4568-8454-265627c9b3a3</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>62e14f65-fcb1-4034-acfd-15f247e24805</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 4</td>
+<td>1425</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>e6e89962-e9cd-4822-a1e1-fa2db103c280</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>c6fc704d-eeaa-4a6f-a3da-33d23670e15b</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 3</td>
+<td>1350</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>bdd97c90-1b57-4f1d-a435-c716f90556ef</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 2</td>
+<td>1275</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>e68d8151-beaf-4176-a80f-4d5905f93842</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>1c453a32-607d-4843-ae2c-330a4562ab12</td>
+<td>GA Equal 1</td>
+<td>1200</td>
+<td></td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+</tbody></table></section>
+<section><h2>Settlements</h2><table><thead><tr>
+<th>id</th>
+<th>group_id</th>
+<th>from_user_id</th>
+<th>to_user_id</th>
+<th>amount_cents</th>
+<th>note</th>
+<th>created_at</th>
+</tr></thead><tbody>
+<tr>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>6c3e965f-c492-443d-8bfe-0a41e3f17e37</td>
+<td>62e14f65-fcb1-4034-acfd-15f247e24805</td>
+<td>71ef85c8-c257-4c3b-8643-46b9cbfc3a4b</td>
+<td>30662</td>
+<td>GA re-settle all</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+<tr>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>a62e7465-dfcf-4b8c-b093-f135b26753ad</td>
+<td>b7571f8a-2a96-45cb-968b-b6db6692ba74</td>
+<td>69eb12c1-27a5-43e3-a4ea-b7d6b1b1350f</td>
+<td>11250</td>
+<td>GB settle all</td>
+<td>3/9/2026 3:23:30 AM +00:00</td>
+</tr>
+</tbody></table></section>
+<section><h2>SettlementExpenses</h2><table><thead><tr>
+<th>id</th>
+<th>settlement_id</th>
+<th>expense_id</th>
+</tr></thead><tbody>
+<tr>
+<td>419a195a-700d-4bea-b915-936189b84fef</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>4302f16d-58b7-4c12-aa19-d2d4a3898ae0</td>
+</tr>
+<tr>
+<td>47e87724-7019-445a-8479-59de2eeb96f0</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>0d69c4b6-8ed5-4d68-824d-97f07afb6f72</td>
+</tr>
+<tr>
+<td>5ae1cebe-8ac7-467f-be8c-3e82b7e6e76b</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>130a8145-e85a-4385-81f6-b74e4a161c39</td>
+</tr>
+<tr>
+<td>5e0e05a1-9d4e-454f-9356-fea193a0e5d3</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>593af2d3-f375-47fe-a0c9-736ce7f61e3d</td>
+</tr>
+<tr>
+<td>7f37f307-fd0f-45c3-ac3b-3268176b96df</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>f207ad03-c245-457d-89d3-63ba448a6f25</td>
+</tr>
+<tr>
+<td>8639fbcb-6190-42c4-beee-ecabaffa4ef5</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>55675835-0462-45bd-a3a0-c1bba2968874</td>
+</tr>
+<tr>
+<td>8f064f22-3864-4dc6-b297-c4441ffe3b2e</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>41cde1e6-8c4e-441c-b270-3330e9562dde</td>
+</tr>
+<tr>
+<td>bfde3cc7-cba0-479a-9bec-0708162bd94e</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>d02eb31c-469c-418b-aa52-be9a5ed51973</td>
+</tr>
+<tr>
+<td>cc809e54-d4b7-4d21-9783-026d3aa20b17</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>a01e05af-4ea5-4422-8169-d1abee90389e</td>
+</tr>
+<tr>
+<td>df11f3a5-0a0b-4901-b523-e728380e2a21</td>
+<td>777ba795-7908-4318-bb35-8308f25acfdb</td>
+<td>f465c1f0-c8f8-46c5-a7d6-63613d306d57</td>
+</tr>
+<tr>
+<td>06e848ed-7308-43f1-a86c-9c4294dde8fb</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>d6bfeb50-024e-4bd1-8302-e740b5d48d8a</td>
+</tr>
+<tr>
+<td>0a54e23a-972e-4da9-acf5-52f967d8d1c7</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>498d6541-f2d5-4536-b00d-7b4a39b20f63</td>
+</tr>
+<tr>
+<td>3e99a737-390b-420b-9cc5-7256ca02d10a</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>bdd97c90-1b57-4f1d-a435-c716f90556ef</td>
+</tr>
+<tr>
+<td>4202226f-2a8c-41bf-b9b2-bf98c6b09f5b</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>e68d8151-beaf-4176-a80f-4d5905f93842</td>
+</tr>
+<tr>
+<td>44a852d6-2749-4116-8b40-7a40fc06642f</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>a0d3186a-23d1-4568-8454-265627c9b3a3</td>
+</tr>
+<tr>
+<td>4a4873ea-49b5-406e-a2ba-4fc624f20567</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>3afc487c-5674-49d0-be0c-69ca4c3dbac9</td>
+</tr>
+<tr>
+<td>53df91e9-e289-436a-affa-74a16b0c2216</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>e6e89962-e9cd-4822-a1e1-fa2db103c280</td>
+</tr>
+<tr>
+<td>6ee9a976-7a58-43e5-a553-f30e580bd22f</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>969012e2-acbe-4d1e-87ac-ed77e5e1f719</td>
+</tr>
+<tr>
+<td>7a5fc9d2-cfd9-4bf5-905e-3a1ba4aa9c65</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>0c29675b-3695-44b2-8f64-c6c6cb03789c</td>
+</tr>
+<tr>
+<td>7ab2f4cc-e9ef-470e-8950-3e5f8b1049e1</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>93d28e8e-6687-45aa-bebc-3641c0a8a4fc</td>
+</tr>
+<tr>
+<td>823349e5-5544-4fd4-b82f-e56ee8ab20ee</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>40e11581-acd2-4d42-8a83-db0d322db001</td>
+</tr>
+<tr>
+<td>84abbca0-6964-4c07-aa06-951b0396dfee</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>e27160b0-f5a3-42fa-aa0b-6deac36fe564</td>
+</tr>
+<tr>
+<td>99fc2f88-7b16-4ecf-9f90-862be59dc23e</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>bf7b5637-64e0-4e25-bf26-db0feb3d9463</td>
+</tr>
+<tr>
+<td>a31eaf9d-535e-485c-ad4d-f4e29d5066ec</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>bf9f6afe-ef6e-4aa8-9789-b73f28830a1d</td>
+</tr>
+<tr>
+<td>b2a309d9-59d2-4868-b21a-6459b21068dd</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>90d069e6-b9f6-4340-94f2-36b0f62eac58</td>
+</tr>
+<tr>
+<td>d5282a1a-f27e-43cb-b1a0-52937d26614d</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>5e3b3fc9-81f0-4d42-88bd-5e05647c1e64</td>
+</tr>
+<tr>
+<td>d5b09c19-718c-4614-aeb6-f1856a3ee6dd</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>4762b20e-373f-4f0e-b006-985895f96083</td>
+</tr>
+<tr>
+<td>e78840cf-96c3-4382-bd4b-7719236a1884</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>17cb1e0f-a6ae-427d-8407-622a5eabc5ec</td>
+</tr>
+<tr>
+<td>e7fb0217-1430-4bd0-a4ad-8313d2cc122b</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>ceb98556-944d-40b4-a788-653247045082</td>
+</tr>
+<tr>
+<td>ff737dfb-8f82-4c9c-b8fc-76fedf5a3516</td>
+<td>d96ec5f5-d390-4c39-aa53-493f4bf6cd67</td>
+<td>5b251c82-e167-43d1-a040-ff427fb70dd2</td>
+</tr>
+</tbody></table></section>
+</body></html>

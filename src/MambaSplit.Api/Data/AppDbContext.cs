@@ -15,6 +15,8 @@ public class AppDbContext : DbContext
     public DbSet<InviteEntity> Invites => Set<InviteEntity>();
     public DbSet<ExpenseEntity> Expenses => Set<ExpenseEntity>();
     public DbSet<ExpenseSplitEntity> ExpenseSplits => Set<ExpenseSplitEntity>();
+    public DbSet<SettlementEntity> Settlements => Set<SettlementEntity>();
+    public DbSet<SettlementExpenseEntity> SettlementExpenses => Set<SettlementExpenseEntity>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -22,6 +24,18 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<GroupMemberEntity>()
             .HasIndex(x => new { x.GroupId, x.UserId })
             .IsUnique();
+
+        modelBuilder.Entity<GroupMemberEntity>()
+            .HasOne<GroupEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.GroupId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<GroupMemberEntity>()
+            .HasOne<UserEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<InviteEntity>()
             .HasIndex(x => x.TokenHash)
@@ -44,6 +58,22 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ExpenseEntity>()
             .HasIndex(x => new { x.GroupId, x.CreatedByUserId, x.IdempotencyKey })
             .IsUnique();
+
+        modelBuilder.Entity<SettlementExpenseEntity>()
+            .HasIndex(x => x.ExpenseId)
+            .IsUnique();
+
+        modelBuilder.Entity<SettlementExpenseEntity>()
+            .HasOne<SettlementEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.SettlementId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SettlementExpenseEntity>()
+            .HasOne<ExpenseEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.ExpenseId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<RefreshTokenEntity>()
             .HasIndex(x => x.TokenHash)

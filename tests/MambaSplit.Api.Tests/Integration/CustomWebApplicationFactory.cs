@@ -11,6 +11,7 @@ namespace MambaSplit.Api.Tests.Integration;
 internal sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
     private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"mambasplit-tests-{Guid.NewGuid():N}.db");
+    public string DatabasePath => _databasePath;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -23,6 +24,7 @@ internal sealed class CustomWebApplicationFactory : WebApplicationFactory<Progra
                 ["app:security:jwt:secret"] = "test-secret-change-me-test-secret-change-me",
                 ["app:security:jwt:accessTokenMinutes"] = "15",
                 ["app:security:jwt:refreshTokenDays"] = "30",
+                ["app:admin:portalToken"] = "test-admin-token",
                 ["app:database:runMigrationsOnStartup"] = "false",
                 ["ConnectionStrings:Default"] = "Host=ignored;Database=ignored;Username=ignored;Password=ignored",
             });
