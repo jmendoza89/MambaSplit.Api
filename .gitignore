@@ -22,3 +22,4 @@ Thumbs.db
 # Local tooling scratch
 /.docker-temp/
 /artifacts/tempbuild/
+src/MambaSplit.Api/appsettings.local.json
