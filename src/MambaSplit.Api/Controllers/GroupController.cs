@@ -64,6 +64,13 @@ public class GroupController : ControllerBase
         return NoContent();
     }
 
+    [HttpGet("{groupId}/invites")]
+    public async Task<ActionResult<List<GroupInviteDto>>> ListInvites(string groupId, CancellationToken ct)
+    {
+        var invites = await _groupService.ListGroupInvitesAsync(ParseGuid(groupId, "groupId"), User.UserId(), ct);
+        return Ok(invites.Select(GroupInviteDto.From).ToList());
+    }
+
     private static Guid ParseGuid(string value, string field)
     {
         if (!Guid.TryParse(value, out var id))
@@ -83,6 +90,15 @@ public record GroupDto(string Id, string Name)
 
 public record InviteRequest([Required, NotBlank, EmailAddress, MaxLength(320)] string Email);
 public record InviteDto(string Token, string Email, string ExpiresAt);
+public record GroupInviteDto(string Id, string GroupId, string Email, string ExpiresAt, string CreatedAt)
+{
+    public static GroupInviteDto From(GroupService.GroupInvite invite) => new(
+        invite.Id.ToString(),
+        invite.GroupId.ToString(),
+        invite.Email,
+        invite.ExpiresAt.ToString("O"),
+        invite.CreatedAt.ToString("O"));
+}
 
 public record GroupDetailsDto(
     GroupInfoDto Group,

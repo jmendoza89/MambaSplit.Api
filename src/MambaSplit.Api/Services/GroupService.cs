@@ -349,6 +349,17 @@ public class GroupService
         return new CreatedInvite(token, normalizedEmail, expiresAt);
     }
 
+    public async Task<List<GroupInvite>> ListGroupInvitesAsync(Guid groupId, Guid actorUserId, CancellationToken ct = default)
+    {
+        await RequireMemberAsync(groupId, actorUserId, ct);
+        var now = DateTimeOffset.UtcNow;
+        return await _db.Invites
+            .Where(i => i.GroupId == groupId && i.ExpiresAt > now)
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => new GroupInvite(i.Id, i.GroupId, i.Email.ToLower(), i.ExpiresAt, i.CreatedAt))
+            .ToListAsync(ct);
+    }
+
     public async Task CancelInviteAsync(Guid groupId, string rawToken, Guid actorUserId, CancellationToken ct = default)
     {
         await RequireMemberAsync(groupId, actorUserId, ct);
@@ -561,6 +572,7 @@ public class GroupService
     }
 
     public record CreatedInvite(string Token, string Email, DateTimeOffset ExpiresAt);
+    public record GroupInvite(Guid Id, Guid GroupId, string Email, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt);
     public record PendingInvite(Guid Id, Guid GroupId, string GroupName, string Email, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt);
     public record GroupDetails(
         GroupInfo Group,

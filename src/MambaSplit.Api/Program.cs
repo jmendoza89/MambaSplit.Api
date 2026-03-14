@@ -143,6 +143,7 @@ if (IsPublicDocsEnabled(app.Environment.EnvironmentName))
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 app.MapControllers();
 
 app.Run();
