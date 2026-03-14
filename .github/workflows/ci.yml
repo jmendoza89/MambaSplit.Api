@@ -28,4 +28,8 @@ jobs:
         run: dotnet build MambaSplit.Api.sln --configuration Release --no-restore
 
       - name: Test
+        env:
+          ASPNETCORE_ENVIRONMENT: Test
+          APP__SECURITY__JWT__SECRET: ${{ vars.TEST_JWT_SECRET }}
+          CONNECTIONSTRINGS__DEFAULT: ${{ vars.TEST_CONNECTION_STRING }}
         run: dotnet test MambaSplit.Api.sln --configuration Release --no-build --nologo
