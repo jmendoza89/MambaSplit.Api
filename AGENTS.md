@@ -11,11 +11,12 @@
   2. If there are no changes, stop and report "nothing to commit".
   3. Run `git add .`.
   4. Create a concise commit message based on the staged diff.
-  5. Commit with that generated message.
-  6. Detect current branch with `git branch --show-current`.
-  7. Run `git pull --rebase origin <current-branch>`.
-  8. Run `git push origin <current-branch>`.
-  9. Report commit hash and push result.
+  5. Detect current branch with `git branch --show-current`.
+  6. If the current branch matches `^(feature|bugfix|hotfix|chore)/([0-9]+)-`, commit with the generated message and include `Refs #<captured-issue-number>` in the commit body.
+  7. If the current branch does not match that pattern, commit with the generated message.
+  8. Run `git pull --rebase origin <current-branch>`.
+  9. Run `git push origin <current-branch>`.
+  10. Report commit hash and push result.
 - `feature_start <issue-number>`:
   1. Validate `<issue-number>` is numeric.
   2. Fetch issue metadata (title + labels) from GitHub for this repo.
@@ -41,6 +42,7 @@
 
 ## Issue Linking Rules
 - Linking commits/PRs to issues does not require a GitHub Action workflow by default.
+- Any commit made on `feature/*`, `bugfix/*`, `hotfix/*`, or `chore/*` branches that include an issue number in the branch name must include `Refs #<issue-number>` in the commit body.
 - GitHub automatically links when commit bodies or PR descriptions include references like `#123`.
 - GitHub automatically closes issues when PR descriptions include keywords such as `Closes #123`, `Fixes #123`, or `Resolves #123` and the PR is merged into the default branch.
 - If strict enforcement is needed, add a separate workflow or branch rule that fails PRs missing required issue references.
