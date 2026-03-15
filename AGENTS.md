@@ -37,14 +37,19 @@
   1. Run `feature_commit`.
   2. Detect current branch name.
   3. Create a PR from `<current-branch>` into `develop` (do not push directly to `develop`).
-  4. In the PR description, include:
+  4. Name the PR title using conventional-commit style so CI title validation passes:
+     - use `<type>: #<issue-number> <concise-summary>` when issue number is available.
+     - use `<type>: <concise-summary>` when issue number is not available.
+     - valid `<type>` values: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`, `revert`.
+     - map branch prefixes by default: `feature -> feat`, `bugfix -> fix`, `hotfix -> fix`, `chore -> chore`.
+  5. In the PR description, include:
      - a concise summary of the implemented changes,
      - files/modules affected,
      - test/validation results,
      - issue-closing keyword when applicable (for example: `Closes #<issue-number>`).
-  5. Share the PR link and change summary for review before merge.
-  6. Merge the PR into `develop` after review/approval and required checks pass.
-  7. If `[next-issue-number]` is provided, run `feature_start <next-issue-number>` to create and checkout the next branch; otherwise skip this step.
+  6. Share the PR link and change summary for review before merge.
+  7. Merge the PR into `develop` after review/approval and required checks pass.
+  8. If `[next-issue-number]` is provided, run `feature_start <next-issue-number>` to create and checkout the next branch; otherwise skip this step.
 
 ## Issue Linking Rules
 - Linking commits/PRs to issues does not require a GitHub Action workflow by default.
@@ -52,6 +57,7 @@
 - GitHub automatically links when commit bodies or PR descriptions include references like `#123`.
 - GitHub automatically closes issues when PR descriptions include keywords such as `Closes #123`, `Fixes #123`, or `Resolves #123` and the PR is merged into the default branch.
 - If strict enforcement is needed, add a separate workflow or branch rule that fails PRs missing required issue references.
+- Labels can be used for triage/automation, but labels do not replace required PR title conventions or issue references.
 
 ## Branch Strategy and Protection
 - Every repository should use a two-base-branch model:
@@ -205,3 +211,4 @@ Why the correct approach works:
 - `Select-Object -First N` safely reads the first N lines.
 - `Select-Object -Skip N -First M` safely reads specific line ranges.
 - No directory navigation is needed; direct file access is simpler and more reliable.
+
