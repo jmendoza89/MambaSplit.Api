@@ -192,6 +192,188 @@ public class FlowIntegrationTests
     }
 
     [Fact]
+    public async Task GroupInvites_AreScopedToSenderWithinSameGroup()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessB, _, userIdB, emailB) = await Signup(client, "Member", "password123");
+        var (_, _, _, emailC) = await Signup(client, "Invitee C", "password123");
+        var (_, _, _, emailD) = await Signup(client, "Invitee D", "password123");
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Sender Scope Group" }, accessA)))["id"]!.GetValue<string>();
+        var memberInviteToken = (await ReadJsonObject(await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailB }, accessA)))["token"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = memberInviteToken }, accessB)).StatusCode);
+
+        var inviteByA = await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessA);
+        Assert.Equal(HttpStatusCode.OK, inviteByA.StatusCode);
+        var payloadByA = await ReadJsonObject(inviteByA);
+        Assert.Equal(userIdA, payloadByA["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailC.ToLowerInvariant(), payloadByA["sentToEmail"]?.GetValue<string>());
+        Assert.Equal(emailC.ToLowerInvariant(), payloadByA["email"]?.GetValue<string>());
+
+        var inviteByB = await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailD }, accessB);
+        Assert.Equal(HttpStatusCode.OK, inviteByB.StatusCode);
+        var payloadByB = await ReadJsonObject(inviteByB);
+        Assert.Equal(userIdB, payloadByB["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailD.ToLowerInvariant(), payloadByB["sentToEmail"]?.GetValue<string>());
+        Assert.Equal(emailD.ToLowerInvariant(), payloadByB["email"]?.GetValue<string>());
+
+        var listAResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
+        Assert.Equal(HttpStatusCode.OK, listAResponse.StatusCode);
+        var listA = await listAResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.Single(listA);
+        Assert.Equal(userIdA, listA[0]?["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailC.ToLowerInvariant(), listA[0]?["sentToEmail"]?.GetValue<string>());
+        Assert.Equal(emailC.ToLowerInvariant(), listA[0]?["email"]?.GetValue<string>());
+
+        var listBResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessB);
+        Assert.Equal(HttpStatusCode.OK, listBResponse.StatusCode);
+        var listB = await listBResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.Single(listB);
+        Assert.Equal(userIdB, listB[0]?["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailD.ToLowerInvariant(), listB[0]?["sentToEmail"]?.GetValue<string>());
+        Assert.Equal(emailD.ToLowerInvariant(), listB[0]?["email"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task CancelInvite_OnlySenderCanCancel()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, _, _) = await Signup(client, "Owner", "password123");
+        var (accessB, _, _, emailB) = await Signup(client, "Member", "password123");
+        var (_, _, _, emailC) = await Signup(client, "Invitee C", "password123");
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Cancel Sender Group" }, accessA)))["id"]!.GetValue<string>();
+        var memberInviteToken = (await ReadJsonObject(await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailB }, accessA)))["token"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = memberInviteToken }, accessB)).StatusCode);
+
+        var inviteToken = (await ReadJsonObject(await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessA)))["token"]!.GetValue<string>();
+
+        var cancelByNonSender = await Delete(client, $"/api/v1/groups/{groupId}/invites/{inviteToken}", accessB);
+        Assert.Equal(HttpStatusCode.Forbidden, cancelByNonSender.StatusCode);
+
+        var cancelBySender = await Delete(client, $"/api/v1/groups/{groupId}/invites/{inviteToken}", accessA);
+        Assert.Equal(HttpStatusCode.NoContent, cancelBySender.StatusCode);
+    }
+
+    [Fact]
+    public async Task CancelInviteById_SenderCanCancelOwnInvite()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, _, _) = await Signup(client, "Owner", "password123");
+        var (_, _, _, emailC) = await Signup(client, "Invitee C", "password123");
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "ById Cancel Group" }, accessA)))["id"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessA)).StatusCode);
+
+        var listResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
+        Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
+        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var inviteId = invites[0]?["id"]?.GetValue<string>();
+        Assert.False(string.IsNullOrWhiteSpace(inviteId));
+
+        var cancel = await Delete(client, $"/api/v1/groups/{groupId}/invites/by-id/{inviteId}", accessA);
+        Assert.Equal(HttpStatusCode.NoContent, cancel.StatusCode);
+    }
+
+    [Fact]
+    public async Task CancelInviteById_NonSenderMemberCannotCancel()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, _, _) = await Signup(client, "Owner", "password123");
+        var (accessB, _, _, emailB) = await Signup(client, "Member", "password123");
+        var (_, _, _, emailC) = await Signup(client, "Invitee C", "password123");
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "ById Cancel Auth Group" }, accessA)))["id"]!.GetValue<string>();
+        var memberInviteToken = (await ReadJsonObject(await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailB }, accessA)))["token"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = memberInviteToken }, accessB)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessA)).StatusCode);
+        var listResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
+        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var inviteId = invites[0]?["id"]?.GetValue<string>();
+        Assert.False(string.IsNullOrWhiteSpace(inviteId));
+
+        var cancel = await Delete(client, $"/api/v1/groups/{groupId}/invites/by-id/{inviteId}", accessB);
+        Assert.Equal(HttpStatusCode.Forbidden, cancel.StatusCode);
+    }
+
+    [Fact]
+    public async Task CancelInviteById_WrongGroupPathReturnsNotFound()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, _, _) = await Signup(client, "Owner", "password123");
+        var (_, _, _, emailC) = await Signup(client, "Invitee C", "password123");
+
+        var groupAId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Invite Source Group" }, accessA)))["id"]!.GetValue<string>();
+        var groupBId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Wrong Path Group" }, accessA)))["id"]!.GetValue<string>();
+
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupAId}/invites", new { email = emailC }, accessA)).StatusCode);
+        var listResponse = await Get(client, $"/api/v1/groups/{groupAId}/invites", accessA);
+        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var inviteId = invites[0]?["id"]?.GetValue<string>();
+        Assert.False(string.IsNullOrWhiteSpace(inviteId));
+
+        var cancel = await Delete(client, $"/api/v1/groups/{groupBId}/invites/by-id/{inviteId}", accessA);
+        Assert.Equal(HttpStatusCode.NotFound, cancel.StatusCode);
+    }
+
+    [Fact]
+    public async Task CancelInviteById_InvalidInviteIdReturnsValidationError()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, _, _) = await Signup(client, "Owner", "password123");
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Invalid Invite Id Group" }, accessA)))["id"]!.GetValue<string>();
+
+        var cancel = await Delete(client, $"/api/v1/groups/{groupId}/invites/by-id/not-a-uuid", accessA);
+        Assert.Equal(HttpStatusCode.BadRequest, cancel.StatusCode);
+    }
+
+    [Fact]
+    public async Task InviteAcceptance_WorksWhenInviteIsSentByNonOwnerMember()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, _, _) = await Signup(client, "Owner", "password123");
+        var (accessB, _, _, emailB) = await Signup(client, "Member", "password123");
+        var (accessC, _, _, emailC) = await Signup(client, "Invitee C", "password123");
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Member Sent Invite Group" }, accessA)))["id"]!.GetValue<string>();
+        var memberInviteToken = (await ReadJsonObject(await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailB }, accessA)))["token"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = memberInviteToken }, accessB)).StatusCode);
+
+        var inviteFromMember = await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessB);
+        Assert.Equal(HttpStatusCode.OK, inviteFromMember.StatusCode);
+        var inviteToken = (await ReadJsonObject(inviteFromMember))["token"]!.GetValue<string>();
+
+        var accept = await PostJson(client, "/api/v1/invites/accept", new { token = inviteToken }, accessC);
+        Assert.Equal(HttpStatusCode.OK, accept.StatusCode);
+
+        var detailsAsInvitee = await Get(client, $"/api/v1/groups/{groupId}/details", accessC);
+        Assert.Equal(HttpStatusCode.OK, detailsAsInvitee.StatusCode);
+    }
+
+    [Fact]
     public async Task MemberCanCreateExpenseOnBehalfOfAnotherMember_CurrentBehavior()
     {
         using var factory = new CustomWebApplicationFactory();

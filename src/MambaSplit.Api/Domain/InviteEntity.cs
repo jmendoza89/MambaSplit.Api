@@ -13,9 +13,19 @@ public class InviteEntity
     [Column("group_id")]
     public Guid GroupId { get; set; }
 
+    [Column("sent_by_user_id")]
+    public Guid SentByUserId { get; set; }
+
     [Column("email")]
     [MaxLength(320)]
-    public string Email { get; set; } = string.Empty;
+    public string SentToEmail { get; set; } = string.Empty;
+
+    [NotMapped]
+    public string Email
+    {
+        get => SentToEmail;
+        set => SentToEmail = value;
+    }
 
     [Column("token_hash")]
     [MaxLength(120)]

@@ -52,6 +52,11 @@ public class SettlementService
             throw new ValidationException("Duplicate expense ids in settlement payload");
         }
 
+        if (normalizedExpenseIds.Count == 0)
+        {
+            throw new ValidationException("At least one expense must be selected");
+        }
+
         await _groupService.RequireMemberAsync(groupId, actorUserId, ct);
         await _groupService.RequireMembersAsync(groupId, new[] { fromUserId, toUserId }, ct);
 
@@ -82,26 +87,58 @@ public class SettlementService
         {
             var expenses = await _db.Expenses
                 .Where(e => e.GroupId == groupId && normalizedExpenseIds.Contains(e.Id))
-                .Select(e => new { e.Id, e.AmountCents })
+                .Select(e => new { e.Id, e.PayerUserId })
                 .ToListAsync(ct);
             if (expenses.Count != normalizedExpenseIds.Count)
             {
                 throw new ValidationException("One or more expenses do not belong to this group");
             }
 
-            long expectedAmountCents;
+            var expenseIdsSet = normalizedExpenseIds.ToHashSet();
+            var splits = await _db.ExpenseSplits
+                .Where(s => expenseIdsSet.Contains(s.ExpenseId) && (s.UserId == fromUserId || s.UserId == toUserId))
+                .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
+                .ToListAsync(ct);
+            var splitsByExpense = splits
+                .GroupBy(s => s.ExpenseId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            long expectedAmountCents = 0;
             try
             {
-                expectedAmountCents = expenses.Sum(e => e.AmountCents);
+                foreach (var expense in expenses)
+                {
+                    var expenseSplits = splitsByExpense.GetValueOrDefault(expense.Id, []);
+                    if (expense.PayerUserId == toUserId)
+                    {
+                        var fromOwed = expenseSplits
+                            .Where(s => s.UserId == fromUserId)
+                            .Sum(s => s.AmountOwedCents);
+                        expectedAmountCents = checked(expectedAmountCents + fromOwed);
+                    }
+
+                    if (expense.PayerUserId == fromUserId)
+                    {
+                        var toOwed = expenseSplits
+                            .Where(s => s.UserId == toUserId)
+                            .Sum(s => s.AmountOwedCents);
+                        expectedAmountCents = checked(expectedAmountCents - toOwed);
+                    }
+                }
             }
             catch (OverflowException)
             {
-                throw new ValidationException("Expense amount sum overflow");
+                throw new ValidationException("Settlement amount calculation overflow");
+            }
+
+            if (expectedAmountCents <= 0)
+            {
+                throw new ValidationException("Selected expenses do not produce an outstanding balance for the selected payer and receiver");
             }
 
             if (expectedAmountCents != amountCents)
             {
-                throw new ValidationException($"Settlement amount ({amountCents}) must match selected expense total ({expectedAmountCents})");
+                throw new ValidationException($"Settlement amount ({amountCents}) must match selected outstanding balance ({expectedAmountCents})");
             }
 
             var alreadySettled = await _db.SettlementExpenses
@@ -341,7 +378,8 @@ public class SettlementService
         }
 
         if (pg.SqlState != PostgresErrorCodes.ForeignKeyViolation &&
-            pg.SqlState != PostgresErrorCodes.UniqueViolation)
+            pg.SqlState != PostgresErrorCodes.UniqueViolation &&
+            pg.SqlState != PostgresErrorCodes.CheckViolation)
         {
             return false;
         }
