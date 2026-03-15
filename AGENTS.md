@@ -48,8 +48,7 @@
      - test/validation results,
      - issue-closing keyword when applicable (for example: `Closes #<issue-number>`).
   6. Share the PR link and change summary for review before merge.
-  7. Merge the PR into `develop` after review/approval and required checks pass.
-  8. If `[next-issue-number]` is provided, run `feature_start <next-issue-number>` to create and checkout the next branch; otherwise skip this step.
+  7. If `[next-issue-number]` is provided, run `feature_start <next-issue-number>` to create and checkout the next branch; otherwise skip this step.
 
 ## Issue Linking Rules
 - Linking commits/PRs to issues does not require a GitHub Action workflow by default.
