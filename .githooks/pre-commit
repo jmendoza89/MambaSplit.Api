@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -eu
+
+if command -v pwsh >/dev/null 2>&1; then
+  pwsh -NoProfile -ExecutionPolicy Bypass -File "./scripts/sync-agents.ps1"
+else
+  powershell -NoProfile -ExecutionPolicy Bypass -File "./scripts/sync-agents.ps1"
+fi
+
+git add .github/agents/*.agent.md 2>/dev/null || true

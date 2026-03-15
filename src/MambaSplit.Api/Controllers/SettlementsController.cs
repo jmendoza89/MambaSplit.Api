@@ -36,7 +36,7 @@ public class SettlementsController : ControllerBase
             fromUserId,
             toUserId,
             request.AmountCents,
-            (request.ExpenseIds ?? [])
+            request.ExpenseIds
                 .Select(x => ParseGuid(x, "expenseIds"))
                 .ToList(),
             request.Note,
@@ -114,7 +114,7 @@ public record CreateSettlementRequest(
     [Required, NotBlank] string FromUserId,
     [Required, NotBlank] string ToUserId,
     [Range(1, long.MaxValue)] long AmountCents,
-    List<string>? ExpenseIds,
+    [Required, MinLength(1)] List<string> ExpenseIds,
     [MaxLength(500)] string? Note,
     string? SettledAt);
 

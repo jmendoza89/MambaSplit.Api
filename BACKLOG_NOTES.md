@@ -4,8 +4,29 @@
 
 - Date: 2026-03-10
 - Priority: High
+- Implementation status review date: 2026-03-15
+- Status summary: Deferred design; not implemented in current backend.
 - Context: Current settlement flow supports cash settlement entries, but does not allocate payment against split-level debt rows.
 - Gap: Without allocation, the system cannot answer "which exact debt rows were paid by this settlement" or support robust partial debt coverage tracking.
+
+### Current implementation status (verified)
+
+- [x] `settlements` payment header exists.
+- [x] Settlement to expense-header links exist via `settlement_expenses`.
+- [x] Settlement creation currently requires `expenseIds` and rejects empty lists.
+- [x] Settlement amount is validated against selected expenses' computed pair balance.
+- [x] One expense can be linked to only one settlement (unique on `settlement_expenses.expense_id`).
+- [ ] `settlement_split_allocations` table exists.
+- [ ] Split-level allocation records exist for each settlement payment.
+- [ ] FIFO auto-allocation across eligible split rows exists.
+- [ ] Invariant enforcement at split-allocation level exists.
+- [ ] API accepts minimal pair + amount payload without explicit `expenseIds`.
+- [ ] Projection endpoints for pair remaining owed and settlement allocation breakdown exist.
+
+### Notes on model mismatch
+
+- Current model settles at expense-header level (`settlement_expenses`), not split-debt-row level.
+- Current balance updates are pair/net based; there is no split-allocation ledger.
 - Proposed data model:
   - Keep `settlements` as the payment header record.
   - Add `settlement_split_allocations`:

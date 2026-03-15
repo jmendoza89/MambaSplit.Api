@@ -70,7 +70,7 @@ public class SettlementIntegrityIntegrationTests
             expenseIds = new[] { expenseId },
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
-        }, accessA);
+        }, accessB);
         Assert.Equal(HttpStatusCode.Created, createSettlement.StatusCode);
         var settlementId = (await ReadJsonObject(createSettlement))["settlementId"]!.GetValue<string>();
 
@@ -128,7 +128,7 @@ public class SettlementIntegrityIntegrationTests
             expenseIds = new[] { expenseId },
             note = "mismatch",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
-        }, accessA);
+        }, accessB);
         Assert.Equal(HttpStatusCode.BadRequest, mismatch.StatusCode);
         var payload = await ReadJsonObject(mismatch);
         Assert.Equal("VALIDATION_FAILED", payload["code"]?.GetValue<string>());
@@ -166,11 +166,11 @@ public class SettlementIntegrityIntegrationTests
             expenseIds = Array.Empty<string>(),
             note = "cash settle partial",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
-        }, accessA);
+        }, accessB);
         Assert.Equal(HttpStatusCode.BadRequest, createSettlement.StatusCode);
         var payload = await ReadJsonObject(createSettlement);
         Assert.Equal("VALIDATION_FAILED", payload["code"]?.GetValue<string>());
-        Assert.Equal("At least one expense must be selected", payload["message"]?.GetValue<string>());
+        Assert.Contains("ExpenseIds", payload["message"]?.GetValue<string>() ?? string.Empty);
     }
 
     [Fact]
@@ -206,7 +206,7 @@ public class SettlementIntegrityIntegrationTests
             expenseIds = new[] { expenseId },
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
-        }, accessA);
+        }, accessB);
         Assert.Equal(HttpStatusCode.Created, createSettlement.StatusCode);
         var settlementId = (await ReadJsonObject(createSettlement))["settlementId"]!.GetValue<string>();
 
@@ -222,6 +222,47 @@ public class SettlementIntegrityIntegrationTests
         var payload = await ReadJsonObject(delete);
         Assert.Equal("CONFLICT", payload["code"]?.GetValue<string>());
         Assert.Equal("Expense is settled and cannot be deleted", payload["message"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task CreateSettlement_ByNonPayerActor_ReturnsForbidden()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, userIdA, _) = await Signup(client, "User A", "password123");
+        var (accessB, _, userIdB, emailB) = await Signup(client, "User B", "password123");
+
+        var groupId = await CreateGroup(client, accessA, "Settlement Auth Group");
+        var inviteToken = await Invite(client, groupId, accessA, emailB);
+        var accept = await PostJson(client, "/api/v1/invites/accept", new { token = inviteToken }, accessB);
+        Assert.Equal(HttpStatusCode.OK, accept.StatusCode);
+
+        var createExpense = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
+        {
+            description = "Dinner",
+            payerUserId = userIdA,
+            amountCents = 5000L,
+            participants = new[] { userIdA, userIdB },
+        }, accessA);
+        Assert.Equal(HttpStatusCode.OK, createExpense.StatusCode);
+        var expenseId = (await ReadJsonObject(createExpense))["expenseId"]!.GetValue<string>();
+
+        var createSettlement = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new
+        {
+            fromUserId = userIdB,
+            toUserId = userIdA,
+            amountCents = 2500L,
+            expenseIds = new[] { expenseId },
+            note = "settle dinner",
+            settledAt = DateTimeOffset.UtcNow.ToString("O"),
+        }, accessA);
+
+        Assert.Equal(HttpStatusCode.Forbidden, createSettlement.StatusCode);
+        var payload = await ReadJsonObject(createSettlement);
+        Assert.Equal("FORBIDDEN", payload["code"]?.GetValue<string>());
+        Assert.Equal("Not authorized to create settlement for another member", payload["message"]?.GetValue<string>());
     }
 
     [Fact]

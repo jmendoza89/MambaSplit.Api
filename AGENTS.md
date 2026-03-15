@@ -5,50 +5,27 @@
 - Repository-level `AGENTS.md` files may add stricter or more specific rules.
 - When rules conflict, the closest `AGENTS.md` to the target repo wins.
 
-## Standard Workflow Keywords
-- `feature_commit`:
-  1. Show `git status --short`.
-  2. If there are no changes, stop and report "nothing to commit".
-  3. Run `git add .`.
-  4. Create a concise commit message based on the staged diff.
-  5. Detect current branch with `git branch --show-current`.
-  6. If the current branch matches `^(feature|bugfix|hotfix|chore)/([0-9]+)-`, commit with the generated message and include `Refs #<captured-issue-number>` in the commit body.
-  7. If the current branch does not match that pattern, commit with the generated message.
-  8. Run `git pull --rebase origin <current-branch>`.
-  9. Run `git push origin <current-branch>`.
-  10. Report commit hash and push result.
-- `feature_start <issue-number>`:
-  1. Validate `<issue-number>` is numeric.
-  2. Fetch issue metadata (title + labels) from GitHub for this repo.
-  3. Slugify issue title to lowercase kebab-case.
-  4. Determine branch prefix from labels using this precedence:
-     - if label includes `hotfix` -> prefix `hotfix`
-     - else if label includes `bugfix` or `bug` -> prefix `bugfix`
-     - else if label includes `chore` -> prefix `chore`
-     - else -> prefix `feature`
-  5. Build branch name as `<prefix>/<issue-number>-<slug>`.
-  6. Run `git fetch origin`.
-  7. Ensure local `develop` matches `origin/develop`.
-  8. Create and checkout new branch from updated `develop` with generated name.
-  9. Report issue number, title, labels, and created branch name.
-  10. Ensure commits on this branch include issue references in commit bodies, for example: `Refs #<issue-number>`.
-  11. Ensure the PR from this branch to `develop` includes an issue-closing keyword in the description, for example: `Closes #<issue-number>`.
-- `feature_finalize [next-issue-number]`:
-  1. Run `feature_commit`.
-  2. Detect current branch name.
-  3. Create a PR from `<current-branch>` into `develop` (do not push directly to `develop`).
-  4. Name the PR title using conventional-commit style so CI title validation passes:
-     - use `<type>: #<issue-number> <concise-summary>` when issue number is available.
-     - use `<type>: <concise-summary>` when issue number is not available.
-     - valid `<type>` values: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`, `revert`.
-     - map branch prefixes by default: `feature -> feat`, `bugfix -> fix`, `hotfix -> fix`, `chore -> chore`.
-  5. In the PR description, include:
-     - a concise summary of the implemented changes,
-     - files/modules affected,
-     - test/validation results,
-     - issue-closing keyword when applicable (for example: `Closes #<issue-number>`).
-  6. Share the PR link and change summary for review before merge.
-  7. If `[next-issue-number]` is provided, run `feature_start <next-issue-number>` to create and checkout the next branch; otherwise skip this step.
+## Multi-Repo Lockstep Policy
+- This policy is governed in lockstep across three files:
+  - C:\MambaSplit\MambaSplit.Api\AGENTS.md
+  - C:\MambaSplit\agent-templates\AGENTS.md
+  - C:\MambaSplit\mambasplit-web\AGENTS.md
+- Any policy-level AGENTS change must be applied consistently to all three files unless explicitly scoped otherwise.
+- If a conflict exists between the three files, stop and report:
+  1. conflicting section
+  2. proposed canonical wording
+  3. files requiring reconciliation
+
+## Workflow Ownership Model
+- AGENTS.md defines policy requirements and invariants.
+- Custom agents implement operational runbooks.
+- Do not duplicate long procedural runbooks in AGENTS.md when the same logic is owned by a custom agent.
+- Required workflow outcomes:
+  1. Branch creation from issue metadata must enforce naming guardrails and base from develop.
+  2. Commits on issue-numbered feature, bugfix, hotfix, and chore branches must include Refs #<issue-number> in commit body.
+  3. PRs from working branches must target develop and follow required title and description conventions.
+  4. Finalization flow must include commit, sync, push, and PR creation evidence.
+- Agent responsibilities are defined in the Custom Agent Catalog section below.
 
 ## Issue Linking Rules
 - Linking commits/PRs to issues does not require a GitHub Action workflow by default.
@@ -113,10 +90,21 @@ Branch protection requirements for `main` should also include:
 - `<issue-number>` must be numeric.
 - Slug must be lowercase letters, numbers, hyphens only.
 
+## Custom Agent Catalog
+- Combined workflow agent:
+  - feature-workflow-manager
+- Review agent:
+  - risk-first-pr-reviewer
+- Frontend visual implementation agent:
+  - ui-visual-implementer
+- When these agents are available, prefer them over ad-hoc execution for their scope.
+- Agents must respect all safety, issue-linking, branch strategy, and failure behavior rules defined in this file.
+
 ## Startup and Test Defaults
 - Prefer project-provided scripts if present.
 - For Java projects, prefer wrapper commands (`mvnw`, `gradlew`) over global installs.
 - For local infra, verify Docker daemon before running compose commands.
+- Before committing in consuming repositories, run `./scripts/sync-agents.ps1` to sync `.github/agents` from `agent-templates/agents`.
 
 ## Safety Rules
 - Never run destructive git commands unless explicitly requested.
@@ -126,6 +114,7 @@ Branch protection requirements for `main` should also include:
 ## Communication
 - Keep responses concise and action-oriented.
 - Report what changed, what was verified, and what could not be verified.
+- For workflow and review tasks, use the designated custom agent when available and report policy compliance explicitly.
 
 ## Coding Philosophy
 
