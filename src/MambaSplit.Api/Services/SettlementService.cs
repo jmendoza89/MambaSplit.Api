@@ -60,7 +60,7 @@ public class SettlementService
         await _groupService.RequireMemberAsync(groupId, actorUserId, ct);
         await _groupService.RequireMembersAsync(groupId, new[] { fromUserId, toUserId }, ct);
 
-        EnforceDelegatedFromUserPolicy(actorUserId, fromUserId);
+        EnforceSettlementAuthorPolicy(actorUserId, fromUserId);
 
         var effectiveSettAtInput = settledAt ?? DateTimeOffset.UtcNow;
         var effectiveSettledAt = effectiveSettAtInput.ToUniversalTime();
@@ -352,11 +352,12 @@ public class SettlementService
             expenseIds);
     }
 
-    private static void EnforceDelegatedFromUserPolicy(Guid actorUserId, Guid fromUserId)
+    private static void EnforceSettlementAuthorPolicy(Guid actorUserId, Guid fromUserId)
     {
-        // Explicit policy (current): any group member can record settlement on behalf of another member.
-        _ = actorUserId;
-        _ = fromUserId;
+        if (actorUserId != fromUserId)
+        {
+            throw new AuthorizationException("Not authorized to create settlement for another member");
+        }
     }
 
     private static bool IsExpenseSettlementLinkConflict(DbUpdateException ex)

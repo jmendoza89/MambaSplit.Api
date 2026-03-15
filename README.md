@@ -9,7 +9,67 @@ Shared-expense backend API built with ASP.NET Core 8, EF Core, and PostgreSQL.
 - Groups: create, list, details, delete (owner)
 - Invites: create, list pending, accept, cancel
 - Expenses: equal/exact split, idempotency key, reversal-based delete
+- Settlements: create/list/get with expense-level linkage and amount validation against selected expenses
 - Consistent validation/error responses
+
+## Settlements (Current Behavior)
+
+- Settlement creation requires explicit expense IDs.
+- Authenticated actor must match fromUserId (payer); on-behalf settlement creation is forbidden.
+- Each expense can be linked to at most one settlement.
+- Settlement amount must match the computed outstanding pair balance for selected expenses.
+- Group and user views return settlement records with linked expense IDs.
+
+Current model note:
+- Settlements are linked at expense-header level using settlement_expenses.
+- Split-level settlement allocation (for example, settlement_split_allocations and FIFO auto-allocation across split rows) is not implemented yet.
+
+## API Reference
+
+- Source of truth for request/response contracts is OpenAPI/Swagger when public docs are enabled.
+- Local docs URL: `/swagger` (enabled for local/dev/test/development environments).
+- Local OpenAPI JSON URL: `/swagger/v1/swagger.json`.
+- Keep this README as a high-level guide and operational reference.
+- Do not duplicate full endpoint contracts here; add concise examples only for high-risk flows.
+
+Export a versioned OpenAPI snapshot file into the repo:
+
+```powershell
+./scripts/export-openapi.ps1 -ApiBaseUrl "http://localhost:8080" -OutputPath "docs/openapi/openapi-v1.json" -Timestamped
+```
+
+## Error Contract
+
+- API errors return a consistent JSON shape:
+
+```json
+{
+	"code": "VALIDATION_FAILED",
+	"message": "expenseIds: The field ExpenseIds must be a string or array type with a minimum length of '1'.",
+	"timestamp": "2026-03-15T20:00:00.0000000Z"
+}
+```
+
+- Common error codes:
+	- `VALIDATION_FAILED` (400)
+	- `AUTHENTICATION_FAILED` (401)
+	- `FORBIDDEN` (403)
+	- `RESOURCE_NOT_FOUND` (404)
+	- `CONFLICT` (409)
+	- `DATA_INTEGRITY_VIOLATION` (409)
+
+## Compatibility and Changes
+
+- Backward-compatible changes:
+	- Adding optional response fields.
+	- Adding new endpoints.
+- Potential breaking changes:
+	- Tightened authorization rules.
+	- Required request field changes.
+	- Validation semantics that can change status/message behavior.
+- Current breaking-rule notes:
+	- Settlement create requires `expenseIds` and it must be non-empty.
+	- Authenticated actor must equal settlement `fromUserId`.
 
 ## Stack
 
