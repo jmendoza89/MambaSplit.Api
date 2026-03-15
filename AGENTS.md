@@ -36,9 +36,15 @@
 - `feature_finalize [next-issue-number]`:
   1. Run `feature_commit`.
   2. Detect current branch name.
-  3. Update remote `develop` from remote current branch with fast-forward only:
-     - Use `git push origin origin/<current-branch>:develop` only if safe (fast-forward).
-  4. If `[next-issue-number]` is provided, run `feature_start <next-issue-number>` to create and checkout the next branch; otherwise skip this step.
+  3. Create a PR from `<current-branch>` into `develop` (do not push directly to `develop`).
+  4. In the PR description, include:
+     - a concise summary of the implemented changes,
+     - files/modules affected,
+     - test/validation results,
+     - issue-closing keyword when applicable (for example: `Closes #<issue-number>`).
+  5. Share the PR link and change summary for review before merge.
+  6. Merge the PR into `develop` after review/approval and required checks pass.
+  7. If `[next-issue-number]` is provided, run `feature_start <next-issue-number>` to create and checkout the next branch; otherwise skip this step.
 
 ## Issue Linking Rules
 - Linking commits/PRs to issues does not require a GitHub Action workflow by default.

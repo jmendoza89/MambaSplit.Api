@@ -41,6 +41,15 @@ public class AppDbContext : DbContext
             .HasIndex(x => x.TokenHash)
             .IsUnique();
 
+        modelBuilder.Entity<InviteEntity>()
+            .HasIndex(x => new { x.GroupId, x.SentByUserId, x.CreatedAt });
+
+        modelBuilder.Entity<InviteEntity>()
+            .HasOne<UserEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.SentByUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<ExpenseSplitEntity>()
             .HasIndex(x => new { x.ExpenseId, x.UserId })
             .IsUnique();

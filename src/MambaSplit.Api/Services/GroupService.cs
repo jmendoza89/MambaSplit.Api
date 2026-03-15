@@ -288,13 +288,13 @@ public class GroupService
         var pending = await (
             from i in _db.Invites
             join g in _db.Groups on i.GroupId equals g.Id
-            where i.Email.ToLower() == normalizedQueryEmail && i.ExpiresAt > now
+            where i.SentToEmail.ToLower() == normalizedQueryEmail && i.ExpiresAt > now
             orderby i.CreatedAt descending
             select new PendingInvite(
                 i.Id,
                 i.GroupId,
                 g.Name,
-                i.Email.ToLower(),
+                i.SentToEmail.ToLower(),
                 i.ExpiresAt,
                 i.CreatedAt))
             .ToListAsync(ct);
@@ -302,7 +302,11 @@ public class GroupService
         return pending;
     }
 
-    public async Task<CreatedInvite> CreateInviteAsync(Guid groupId, string email, CancellationToken ct = default)
+    public async Task<CreatedInvite> CreateInviteAsync(
+        Guid groupId,
+        string email,
+        Guid actorUserId,
+        CancellationToken ct = default)
     {
         var normalizedEmail = NormalizeInviteEmail(email);
 
@@ -319,7 +323,7 @@ public class GroupService
 
         var now = DateTimeOffset.UtcNow;
         var existingInvite = await _db.Invites
-            .FirstOrDefaultAsync(i => i.GroupId == groupId && i.Email.ToLower() == normalizedEmail, ct);
+            .FirstOrDefaultAsync(i => i.GroupId == groupId && i.SentToEmail.ToLower() == normalizedEmail, ct);
 
         if (existingInvite is not null)
         {
@@ -339,25 +343,37 @@ public class GroupService
         {
             Id = Guid.NewGuid(),
             GroupId = groupId,
-            Email = normalizedEmail,
+            SentByUserId = actorUserId,
+            SentToEmail = normalizedEmail,
             TokenHash = tokenHash,
             ExpiresAt = expiresAt,
             CreatedAt = now,
         });
 
         await _db.SaveChangesAsync(ct);
-        return new CreatedInvite(token, normalizedEmail, expiresAt);
+        return new CreatedInvite(token, actorUserId, normalizedEmail, normalizedEmail, expiresAt);
     }
 
     public async Task<List<GroupInvite>> ListGroupInvitesAsync(Guid groupId, Guid actorUserId, CancellationToken ct = default)
     {
         await RequireMemberAsync(groupId, actorUserId, ct);
         var now = DateTimeOffset.UtcNow;
-        return await _db.Invites
-            .Where(i => i.GroupId == groupId && i.ExpiresAt > now)
-            .OrderByDescending(i => i.CreatedAt)
-            .Select(i => new GroupInvite(i.Id, i.GroupId, i.Email.ToLower(), i.ExpiresAt, i.CreatedAt))
+        var invites = await _db.Invites
+            .Where(i => i.GroupId == groupId && i.SentByUserId == actorUserId)
             .ToListAsync(ct);
+
+        return invites
+            .Where(i => i.ExpiresAt > now)
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => new GroupInvite(
+                i.Id,
+                i.GroupId,
+                i.SentByUserId,
+                i.SentToEmail.ToLower(),
+                i.SentToEmail.ToLower(),
+                i.ExpiresAt,
+                i.CreatedAt))
+            .ToList();
     }
 
     public async Task CancelInviteAsync(Guid groupId, string rawToken, Guid actorUserId, CancellationToken ct = default)
@@ -369,13 +385,44 @@ public class GroupService
         }
 
         var tokenHash = TokenCodec.Sha256Base64Url(rawToken);
-        var deleted = await _db.Database.ExecuteSqlInterpolatedAsync(
-            $@"delete from invites where group_id = {groupId} and token_hash = {tokenHash}",
-            ct);
-        if (deleted == 0)
+        var invite = await _db.Invites
+            .FirstOrDefaultAsync(i => i.GroupId == groupId && i.TokenHash == tokenHash, ct);
+        if (invite is null)
         {
             throw new ResourceNotFoundException("Invite", "token hash");
         }
+
+        if (invite.SentByUserId != actorUserId)
+        {
+            throw new AuthorizationException("cancel", $"invite {invite.Id}");
+        }
+
+        _db.Invites.Remove(invite);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task CancelInviteByIdAsync(Guid groupId, Guid inviteId, Guid actorUserId, CancellationToken ct = default)
+    {
+        await RequireMemberAsync(groupId, actorUserId, ct);
+
+        var invite = await _db.Invites.FindAsync(new object[] { inviteId }, ct);
+        if (invite is null)
+        {
+            throw new ResourceNotFoundException("Invite", inviteId.ToString());
+        }
+
+        if (invite.GroupId != groupId)
+        {
+            throw new ResourceNotFoundException("Invite", inviteId.ToString());
+        }
+
+        if (invite.SentByUserId != actorUserId)
+        {
+            throw new AuthorizationException("cancel", $"invite {invite.Id}");
+        }
+
+        _db.Invites.Remove(invite);
+        await _db.SaveChangesAsync(ct);
     }
 
     public async Task AcceptInviteAsync(string rawToken, Guid userId, CancellationToken ct = default)
@@ -398,7 +445,7 @@ public class GroupService
             throw new ResourceNotFoundException("User", userId.ToString());
         }
 
-        if (!string.Equals(invite.Email, user.Email, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(invite.SentToEmail, user.Email, StringComparison.OrdinalIgnoreCase))
         {
             throw new ValidationException("Invite email does not match authenticated user");
         }
@@ -445,7 +492,7 @@ public class GroupService
             throw new ResourceNotFoundException("User", userId.ToString());
         }
 
-        if (!string.Equals(invite.Email, user.Email, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(invite.SentToEmail, user.Email, StringComparison.OrdinalIgnoreCase))
         {
             throw new ValidationException("Invite email does not match authenticated user");
         }
@@ -571,8 +618,20 @@ public class GroupService
         return suggestions;
     }
 
-    public record CreatedInvite(string Token, string Email, DateTimeOffset ExpiresAt);
-    public record GroupInvite(Guid Id, Guid GroupId, string Email, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt);
+    public record CreatedInvite(
+        string Token,
+        Guid SentByUserId,
+        string SentToEmail,
+        string Email,
+        DateTimeOffset ExpiresAt);
+    public record GroupInvite(
+        Guid Id,
+        Guid GroupId,
+        Guid SentByUserId,
+        string SentToEmail,
+        string Email,
+        DateTimeOffset ExpiresAt,
+        DateTimeOffset CreatedAt);
     public record PendingInvite(Guid Id, Guid GroupId, string GroupName, string Email, DateTimeOffset ExpiresAt, DateTimeOffset CreatedAt);
     public record GroupDetails(
         GroupInfo Group,

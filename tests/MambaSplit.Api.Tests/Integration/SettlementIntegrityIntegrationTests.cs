@@ -66,7 +66,7 @@ public class SettlementIntegrityIntegrationTests
         {
             fromUserId = userIdB,
             toUserId = userIdA,
-            amountCents = 5000L,
+            amountCents = 2500L,
             expenseIds = new[] { expenseId },
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
@@ -135,7 +135,7 @@ public class SettlementIntegrityIntegrationTests
     }
 
     [Fact]
-    public async Task CreateSettlement_WithoutExpenseIds_AllowsCashSettlement()
+    public async Task CreateSettlement_WithoutExpenseIds_ReturnsValidationFailed()
     {
         using var factory = new CustomWebApplicationFactory();
         using var client = factory.CreateClient();
@@ -167,14 +167,10 @@ public class SettlementIntegrityIntegrationTests
             note = "cash settle partial",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessA);
-        Assert.Equal(HttpStatusCode.Created, createSettlement.StatusCode);
-        var settlementId = (await ReadJsonObject(createSettlement))["settlementId"]!.GetValue<string>();
-
-        var settlementDetails = await Get(client, $"/api/v1/settlements/{settlementId}", accessA);
-        Assert.Equal(HttpStatusCode.OK, settlementDetails.StatusCode);
-        var detailsPayload = await ReadJsonObject(settlementDetails);
-        var linkedExpenses = detailsPayload["expenseIds"]?.AsArray().ToList() ?? [];
-        Assert.Empty(linkedExpenses);
+        Assert.Equal(HttpStatusCode.BadRequest, createSettlement.StatusCode);
+        var payload = await ReadJsonObject(createSettlement);
+        Assert.Equal("VALIDATION_FAILED", payload["code"]?.GetValue<string>());
+        Assert.Equal("At least one expense must be selected", payload["message"]?.GetValue<string>());
     }
 
     [Fact]
@@ -206,7 +202,7 @@ public class SettlementIntegrityIntegrationTests
         {
             fromUserId = userIdB,
             toUserId = userIdA,
-            amountCents = 5000L,
+            amountCents = 2500L,
             expenseIds = new[] { expenseId },
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
