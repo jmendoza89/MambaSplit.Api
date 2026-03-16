@@ -4,6 +4,7 @@ using MambaSplit.Api.Extensions;
 using MambaSplit.Api.Exceptions;
 using MambaSplit.Api.Services;
 using MambaSplit.Api.Validation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using MambaSplit.Api.Configuration;
@@ -17,12 +18,38 @@ public class InternalEmailController : ControllerBase
     private static readonly EmailAddressAttribute EmailValidator = new();
 
     private readonly TransactionalEmailService _emailService;
+    private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly EmailOptions _emailOptions;
+    private readonly IWebHostEnvironment _environment;
 
-    public InternalEmailController(TransactionalEmailService emailService, IOptions<EmailOptions> emailOptions)
+    public InternalEmailController(
+        TransactionalEmailService emailService,
+        IEmailTemplateRenderer templateRenderer,
+        IOptions<EmailOptions> emailOptions,
+        IWebHostEnvironment environment)
     {
         _emailService = emailService;
+        _templateRenderer = templateRenderer;
         _emailOptions = emailOptions.Value;
+        _environment = environment;
+    }
+
+    [AllowAnonymous]
+    [HttpPost("render")]
+    public ActionResult<InternalEmailRenderResponse> Render([FromBody] InternalEmailRenderRequest request)
+    {
+        if (!_environment.IsDevelopment())
+        {
+            EnsureInternalAccess();
+        }
+
+        var rendered = _templateRenderer.Render(request.TemplateKey, request.Model);
+        var subject = string.IsNullOrWhiteSpace(request.Subject) ? rendered.Subject : request.Subject!;
+
+        return Ok(new InternalEmailRenderResponse(
+            subject,
+            rendered.HtmlBody,
+            rendered.TextBody));
     }
 
     [HttpPost("send")]
@@ -111,9 +138,19 @@ public record InternalEmailSendRequest(
     [Required] JsonObject Model,
     IReadOnlyList<string>? Tags);
 
+public record InternalEmailRenderRequest(
+    [Required, NotBlank] string TemplateKey,
+    string? Subject,
+    [Required] JsonObject Model);
+
 public record InternalEmailSendResponse(
     bool Accepted,
     string Status,
     string? ProviderMessageId,
     string? ErrorCode,
     string? ErrorMessage);
+
+public record InternalEmailRenderResponse(
+    string Subject,
+    string HtmlBody,
+    string TextBody);

@@ -138,6 +138,7 @@ if (runMigrationsOnStartup)
 
 app.UseMiddleware<ApiExceptionMiddleware>();
 app.UseCors("WebClient");
+app.UseStaticFiles();
 
 if (IsPublicDocsEnabled(app.Environment.EnvironmentName))
 {

@@ -17,6 +17,65 @@ namespace MambaSplit.Api.Tests.Integration;
 public class InternalEmailEndpointIntegrationTests
 {
     [Fact]
+    public async Task Render_Returns403_ForNonAdminOrNonInternalUser()
+    {
+        using var factory = new InternalEmailTestFactory(_ => EmailSendResult.Success("x"));
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var token = await Signup(client, "user@example.com");
+        var response = await PostRender(client, token, "welcome", new { firstName = "Julio", appLink = "https://app.mambasplit.test" });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Render_Returns400_ForInvalidRequestPayload()
+    {
+        using var factory = new InternalEmailTestFactory(_ => EmailSendResult.Success("x"));
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var token = await Signup(client, "internal@example.com");
+        var response = await PostJsonWithBearer(client, "/api/v1/internal/email/render", token, new
+        {
+            templateKey = "",
+            model = new { firstName = "Julio" },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Render_ReturnsRenderedBodies_WithoutSendingEmail()
+    {
+        var sendCallCount = 0;
+        using var factory = new InternalEmailTestFactory(_ =>
+        {
+            sendCallCount++;
+            return EmailSendResult.Success("provider-123");
+        });
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var token = await Signup(client, "internal@example.com");
+        var response = await PostRender(client, token, "welcome", new
+        {
+            firstName = "Julio",
+            appLink = "https://app.mambasplit.test"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, sendCallCount);
+
+        var body = await response.Content.ReadFromJsonAsync<InternalEmailRenderResponse>();
+        Assert.NotNull(body);
+        Assert.Equal("Welcome to MambaSplit, Julio", body!.Subject);
+        Assert.Contains("Hi Julio, your account is ready.", body.HtmlBody);
+        Assert.Contains("https://app.mambasplit.test", body.TextBody);
+    }
+
+    [Fact]
     public async Task Send_Returns403_ForNonAdminOrNonInternalUser()
     {
         using var factory = new InternalEmailTestFactory(_ => EmailSendResult.Success("x"));
@@ -96,6 +155,15 @@ public class InternalEmailEndpointIntegrationTests
                 inviteToken = "token-123",
             },
             tags = new[] { "invite" },
+        });
+    }
+
+    private static async Task<HttpResponseMessage> PostRender(HttpClient client, string token, string templateKey, object model)
+    {
+        return await PostJsonWithBearer(client, "/api/v1/internal/email/render", token, new
+        {
+            templateKey,
+            model,
         });
     }
 

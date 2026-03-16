@@ -97,6 +97,8 @@ Branch protection requirements for `main` should also include:
   - risk-first-pr-reviewer
 - Frontend visual implementation agent:
   - ui-visual-implementer
+- Email template design agent:
+  - email-template-designer
 - When these agents are available, prefer them over ad-hoc execution for their scope.
 - Agents must respect all safety, issue-linking, branch strategy, and failure behavior rules defined in this file.
 
