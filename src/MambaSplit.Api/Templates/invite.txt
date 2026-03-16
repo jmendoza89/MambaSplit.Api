@@ -1,0 +1,4 @@
+Hello,
+
+{{inviterName}} invited you to join {{groupName}} on MambaSplit.
+Accept your invitation: {{inviteLink}}

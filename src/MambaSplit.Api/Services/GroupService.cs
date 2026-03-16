@@ -2,6 +2,7 @@ using MambaSplit.Api.Data;
 using MambaSplit.Api.Domain;
 using MambaSplit.Api.Exceptions;
 using MambaSplit.Api.Security;
+using System.Text.Json.Nodes;
 using Microsoft.EntityFrameworkCore;
 
 namespace MambaSplit.Api.Services;
@@ -9,10 +10,14 @@ namespace MambaSplit.Api.Services;
 public class GroupService
 {
     private readonly AppDbContext _db;
+    private readonly TransactionalEmailService _transactionalEmailService;
+    private readonly ILogger<GroupService> _logger;
 
-    public GroupService(AppDbContext db)
+    public GroupService(AppDbContext db, TransactionalEmailService transactionalEmailService, ILogger<GroupService> logger)
     {
         _db = db;
+        _transactionalEmailService = transactionalEmailService;
+        _logger = logger;
     }
 
     public async Task<GroupEntity> CreateGroupAsync(Guid creatorUserId, string name, CancellationToken ct = default)
@@ -351,7 +356,43 @@ public class GroupService
         });
 
         await _db.SaveChangesAsync(ct);
+        await SendInviteEmailAsync(groupId, actorUserId, normalizedEmail, token, ct);
         return new CreatedInvite(token, actorUserId, normalizedEmail, normalizedEmail, expiresAt);
+    }
+
+    private async Task SendInviteEmailAsync(Guid groupId, Guid actorUserId, string recipientEmail, string token, CancellationToken ct)
+    {
+        try
+        {
+            var group = await _db.Groups.FindAsync(new object[] { groupId }, ct);
+            var actor = await _db.Users.FindAsync(new object[] { actorUserId }, ct);
+            if (group is null || actor is null)
+            {
+                _logger.LogWarning("Skipping invite email send because group or actor was not found. groupId={GroupId} actorUserId={ActorUserId}", groupId, actorUserId);
+                return;
+            }
+
+            var model = new JsonObject
+            {
+                ["groupName"] = group.Name,
+                ["inviterName"] = actor.DisplayName,
+                ["inviteToken"] = token,
+            };
+
+            await _transactionalEmailService.SendTemplateAsync(
+                "invite",
+                [recipientEmail],
+                [],
+                [],
+                null,
+                model,
+                ["invite", "group:" + groupId.ToString("N")],
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Invite email send failed for groupId={GroupId} recipient={RecipientEmail}", groupId, recipientEmail);
+        }
     }
 
     public async Task<List<GroupInvite>> ListGroupInvitesAsync(Guid groupId, Guid actorUserId, CancellationToken ct = default)

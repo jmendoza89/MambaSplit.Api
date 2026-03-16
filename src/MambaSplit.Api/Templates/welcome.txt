@@ -1,0 +1,14 @@
+Welcome to MambaSplit, {{firstName}}
+
+Your account is ready.
+
+MambaSplit helps you track shared expenses and settle up faster, so everyone stays clear on who paid what.
+
+Create your first group, add an expense, and invite friends in just a few taps.
+
+Open MambaSplit:
+{{appLink}}
+
+If the link above does not open, copy and paste it into your browser.
+
+You are receiving this email because a MambaSplit account was created for you.
