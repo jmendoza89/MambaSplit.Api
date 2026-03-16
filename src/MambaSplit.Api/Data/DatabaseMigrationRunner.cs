@@ -31,7 +31,8 @@ public static class DatabaseMigrationRunner
                 if (!string.Equals(appliedChecksum, script.Checksum, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
-                        $"Migration {script.Version} was already applied with a different checksum.");
+                        $"Migration {script.Version} ({script.FileName}) was already applied with checksum {appliedChecksum}, but the current file checksum is {script.Checksum}. " +
+                        "Do not edit an applied migration; create a new migration instead. If this is a disposable local database, recreate it and rerun startup.");
                 }
 
                 continue;

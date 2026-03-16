@@ -10,6 +10,7 @@ Shared-expense backend API built with ASP.NET Core 8, EF Core, and PostgreSQL.
 - Invites: create, list pending, accept, cancel
 - Expenses: equal/exact split, idempotency key, reversal-based delete
 - Settlements: create/list/get with expense-level linkage and amount validation against selected expenses
+- Transactional email: SMTP2GO-backed invite emails with Cloudflare DNS (SPF/DKIM/DMARC); internal send endpoint for testing/admin use
 - Consistent validation/error responses
 
 ## Settlements (Current Behavior)
