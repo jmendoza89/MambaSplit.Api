@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <body style="margin:0; padding:0; background-color:#eef6f8; font-family:'Avenir Next','Nunito Sans','Segoe UI',sans-serif; color:#062f44;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef6f8; padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; background:linear-gradient(180deg, rgba(255,255,255,0.98), rgba(244,250,252,0.96)); border:1px solid rgba(8,62,86,0.20); border-radius:16px; box-shadow:0 12px 28px rgba(6,47,68,0.14); overflow:hidden;">
+            <tr>
+              <td style="padding:28px 28px 20px; background:linear-gradient(140deg, #07384a, #1a7b72);">
+                <div style="display:inline-block; margin-bottom:12px; padding:6px 10px; border-radius:999px; background:rgba(232,255,246,0.16); color:#e5fff6; font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;">Settlement update</div>
+                <h1 style="margin:0; font-size:28px; line-height:1.2; color:#f3fff9; font-weight:800;">A settlement was recorded</h1>
+                <p style="margin:10px 0 0; font-size:15px; line-height:1.5; color:#d9fff2;">{{payerName}} settled {{amountDisplay}} with {{receiverName}} in {{groupName}}.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 10px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px; border-collapse:separate; border-spacing:0;">
+                  <tr>
+                    <td style="padding:16px 18px; border:1px solid rgba(8,62,86,0.12); border-radius:14px; background:linear-gradient(135deg, #f8fffd, #edf9f7);">
+                      <div style="font-size:12px; line-height:1.4; text-transform:uppercase; letter-spacing:0.08em; color:#4b6f76; font-weight:700;">Amount settled</div>
+                      <div style="margin-top:6px; font-size:30px; line-height:1.1; color:#0a544f; font-weight:800;">{{amountDisplay}}</div>
+                      <div style="margin-top:8px; font-size:13px; line-height:1.5; color:#2f6070;">Recorded {{settledAtDisplay}}</div>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:0 0 12px; font-size:15px; line-height:1.6; color:#0b4763;">
+                  This update affects <strong>{{expenseCountText}}</strong> and keeps the group balance history current for everyone involved.
+                </p>
+
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px; border-collapse:separate; border-spacing:0;">
+                  <tr>
+                    <td style="padding:14px 16px; border-left:4px solid #1a7b72; background:#f5fbfa; color:#20505a; font-size:14px; line-height:1.6; border-radius:0 12px 12px 0;">
+                      <strong style="display:block; margin-bottom:4px; color:#0a544f;">Note</strong>
+                      {{noteText}}
+                    </td>
+                  </tr>
+                </table>
+
+                <a href="{{groupLink}}" style="display:inline-block; background:linear-gradient(130deg, #0b5f5a, #1a7b72); color:#f2fffb; text-decoration:none; font-weight:800; font-size:15px; line-height:1; padding:12px 18px; border-radius:12px;">
+                  Open Group in MambaSplit
+                </a>
+                <p style="margin:18px 0 0; font-size:13px; line-height:1.5; color:#2f6070;">
+                  If the button does not work, use this link:<br />
+                  <a href="{{groupLink}}" style="color:#176784; text-decoration:underline;">{{groupLink}}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 24px; border-top:1px solid rgba(8,62,86,0.12);">
+                <p style="margin:0; font-size:12px; line-height:1.5; color:#456572;">
+                  You are receiving this email because you participate in {{groupName}} on MambaSplit.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

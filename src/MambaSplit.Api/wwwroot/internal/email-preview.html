@@ -63,6 +63,13 @@
       font-size: 14px;
     }
 
+    .preset-grid {
+      display: grid;
+      gap: 8px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-bottom: 4px;
+    }
+
     label {
       display: block;
       margin: 10px 0 6px;
@@ -102,6 +109,12 @@
       color: #eefcff;
       font-weight: 700;
       cursor: pointer;
+    }
+
+    .preset-btn {
+      margin-top: 0;
+      padding: 10px 8px;
+      font-size: 13px;
     }
 
     button:hover {
@@ -183,6 +196,12 @@
         position: static;
       }
     }
+
+    @media (max-width: 480px) {
+      .preset-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -190,6 +209,13 @@
     <section class="card controls">
       <h1>Email Preview Lab</h1>
       <p>Render templates without sending any email. In local Development, bearer token is optional.</p>
+
+      <label>Preset Templates</label>
+      <div class="preset-grid">
+        <button class="preset-btn" data-preset="welcome" type="button">Welcome</button>
+        <button class="preset-btn" data-preset="invite" type="button">Invite</button>
+        <button class="preset-btn" data-preset="settlement" type="button">Settlement</button>
+      </div>
 
       <label for="apiBase">API Base URL</label>
       <input id="apiBase" value="" placeholder="Leave blank to use current origin" />
@@ -204,10 +230,7 @@
       <input id="subject" placeholder="Leave empty to use template subject" />
 
       <label for="model">Model JSON</label>
-      <textarea id="model">{
-  "firstName": "Julio",
-  "appLink": "http://localhost:5173"
-}</textarea>
+      <textarea id="model"></textarea>
 
       <button id="renderButton" type="button">Render Template</button>
       <div id="status" class="status"></div>
@@ -230,19 +253,65 @@
     const textEl = document.getElementById("textBody");
     const frameEl = document.getElementById("htmlFrame");
     const renderButton = document.getElementById("renderButton");
+    const templateKeyEl = document.getElementById("templateKey");
+    const subjectInputEl = document.getElementById("subject");
+    const modelEl = document.getElementById("model");
+
+    const presetDefinitions = {
+      welcome: {
+        templateKey: "welcome",
+        model: {
+          firstName: "Julio",
+          appLink: "http://localhost:5173"
+        }
+      },
+      invite: {
+        templateKey: "invite",
+        model: {
+          groupName: "Weekend Trip",
+          inviterName: "Julio",
+          inviteToken: "invite-token-123"
+        }
+      },
+      settlement: {
+        templateKey: "settlement",
+        model: {
+          groupName: "Weekend Trip",
+          groupId: "11111111-1111-1111-1111-111111111111",
+          payerName: "Ana",
+          receiverName: "Julio",
+          amountDisplay: "$30.00",
+          settledAtDisplay: "March 16, 2026 at 1:05 AM UTC",
+          expenseCountText: "1 linked expense",
+          noteText: "Paid back for dinner"
+        }
+      }
+    };
 
     function setStatus(message, kind) {
       statusEl.textContent = message;
       statusEl.className = "status" + (kind ? " " + kind : "");
     }
 
+    function applyPreset(presetKey) {
+      const preset = presetDefinitions[presetKey];
+      if (!preset) {
+        return;
+      }
+
+      templateKeyEl.value = preset.templateKey;
+      subjectInputEl.value = "";
+      modelEl.value = JSON.stringify(preset.model, null, 2);
+      setStatus("Loaded " + preset.templateKey + " preset.", "");
+    }
+
     async function renderTemplate() {
       const apiBaseInput = document.getElementById("apiBase").value.trim().replace(/\/$/, "");
       const apiBase = apiBaseInput || window.location.origin;
       const bearer = document.getElementById("bearer").value.trim();
-      const templateKey = document.getElementById("templateKey").value.trim();
-      const subject = document.getElementById("subject").value;
-      const modelRaw = document.getElementById("model").value;
+      const templateKey = templateKeyEl.value.trim();
+      const subject = subjectInputEl.value;
+      const modelRaw = modelEl.value;
 
       if (!templateKey) {
         setStatus("Template key is required.", "error");
@@ -304,7 +373,15 @@
       }
     }
 
+    document.querySelectorAll("[data-preset]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        applyPreset(button.dataset.preset);
+        await renderTemplate();
+      });
+    });
+
     renderButton.addEventListener("click", renderTemplate);
+    applyPreset("welcome");
   </script>
 </body>
 </html>

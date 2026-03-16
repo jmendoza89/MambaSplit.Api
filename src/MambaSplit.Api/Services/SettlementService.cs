@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
 using MambaSplit.Api.Data;
 using MambaSplit.Api.Domain;
 using MambaSplit.Api.Exceptions;
@@ -10,11 +12,19 @@ public class SettlementService
 {
     private readonly AppDbContext _db;
     private readonly GroupService _groupService;
+    private readonly TransactionalEmailService _transactionalEmailService;
+    private readonly ILogger<SettlementService> _logger;
 
-    public SettlementService(AppDbContext db, GroupService groupService)
+    public SettlementService(
+        AppDbContext db,
+        GroupService groupService,
+        TransactionalEmailService transactionalEmailService,
+        ILogger<SettlementService> logger)
     {
         _db = db;
         _groupService = groupService;
+        _transactionalEmailService = transactionalEmailService;
+        _logger = logger;
     }
 
     public async Task<SettlementDetails> CreateSettlementAsync(
@@ -175,7 +185,9 @@ public class SettlementService
             throw new ConflictException("Settlement conflicts with current group or expense state");
         }
 
-        return await BuildSettlementDetailsResponseAsync(settlement, ct);
+        var details = await BuildSettlementDetailsResponseAsync(settlement, ct);
+        await SendSettlementEmailAsync(details, actorUserId, ct);
+        return details;
     }
 
     public async Task<SettlementDetails> GetSettlementAsync(Guid settlementId, Guid actorUserId, CancellationToken ct = default)
@@ -350,6 +362,78 @@ public class SettlementService
             settlement.Note,
             settlement.CreatedAt,
             expenseIds);
+    }
+
+    private async Task SendSettlementEmailAsync(SettlementDetails settlement, Guid actorUserId, CancellationToken ct)
+    {
+        try
+        {
+            var group = await _db.Groups.FindAsync(new object[] { settlement.GroupId }, ct);
+            if (group is null)
+            {
+                _logger.LogWarning("Skipping settlement email send because group was not found. settlementId={SettlementId} groupId={GroupId}", settlement.Id, settlement.GroupId);
+                return;
+            }
+
+            var memberUserIds = await _db.GroupMembers
+                .Where(gm => gm.GroupId == settlement.GroupId)
+                .Select(gm => gm.UserId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var recipientEmails = await _db.Users
+                .Where(u => memberUserIds.Contains(u.Id) && u.Id != actorUserId && !string.IsNullOrWhiteSpace(u.Email))
+                .Select(u => u.Email)
+                .ToListAsync(ct);
+
+            var recipients = recipientEmails
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(email => email, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (recipients.Count == 0)
+            {
+                _logger.LogInformation("Skipping settlement email send because no recipients were found. settlementId={SettlementId}", settlement.Id);
+                return;
+            }
+
+            var model = new JsonObject
+            {
+                ["groupName"] = group.Name,
+                ["groupId"] = settlement.GroupId.ToString(),
+                ["payerName"] = settlement.FromUserName,
+                ["receiverName"] = settlement.ToUserName,
+                ["amountDisplay"] = FormatAmount(settlement.AmountCents),
+                ["settledAtDisplay"] = settlement.SettledAt.ToUniversalTime().ToString("MMMM d, yyyy 'at' h:mm tt 'UTC'", CultureInfo.InvariantCulture),
+                ["expenseCountText"] = FormatExpenseCount(settlement.ExpenseIds.Count),
+                ["noteText"] = string.IsNullOrWhiteSpace(settlement.Note) ? "No note was added." : settlement.Note,
+            };
+
+            await _transactionalEmailService.SendTemplateAsync(
+                "settlement",
+                recipients,
+                [],
+                [],
+                null,
+                model,
+                ["settlement", "group:" + settlement.GroupId.ToString("N")],
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Settlement email send failed for settlementId={SettlementId} groupId={GroupId}", settlement.Id, settlement.GroupId);
+        }
+    }
+
+    private static string FormatAmount(long amountCents)
+    {
+        var amount = amountCents / 100m;
+        return "$" + amount.ToString("0.00", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatExpenseCount(int expenseCount)
+    {
+        return expenseCount == 1 ? "1 linked expense" : $"{expenseCount} linked expenses";
     }
 
     private static void EnforceSettlementAuthorPolicy(Guid actorUserId, Guid fromUserId)

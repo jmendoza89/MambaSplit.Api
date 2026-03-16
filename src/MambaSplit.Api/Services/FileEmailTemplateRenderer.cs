@@ -77,6 +77,35 @@ public class FileEmailTemplateRenderer : IEmailTemplateRenderer
             }
         }
 
+        if (Comparer.Equals(templateKey, "settlement"))
+        {
+            var required = new[] { "groupName", "payerName", "receiverName", "amountDisplay", "settledAtDisplay", "expenseCountText", "noteText" };
+            foreach (var field in required)
+            {
+                if (!tokens.TryGetValue(field, out var value) || string.IsNullOrWhiteSpace(value))
+                {
+                    throw new ValidationException($"model.{field} is required for templateKey 'settlement'");
+                }
+            }
+
+            if (!tokens.ContainsKey("groupLink"))
+            {
+                if (!tokens.TryGetValue("groupId", out var groupId) || string.IsNullOrWhiteSpace(groupId))
+                {
+                    throw new ValidationException("model.groupId is required for templateKey 'settlement' when model.groupLink is not provided");
+                }
+
+                if (string.IsNullOrWhiteSpace(_options.FrontendBaseUrl))
+                {
+                    throw new ValidationException("Email:FrontendBaseUrl is required for settlement template rendering");
+                }
+
+                var baseUrl = _options.FrontendBaseUrl.TrimEnd('/');
+                var encodedGroupId = Uri.EscapeDataString(groupId);
+                tokens["groupLink"] = $"{baseUrl}?groupId={encodedGroupId}";
+            }
+        }
+
         return tokens;
     }
 

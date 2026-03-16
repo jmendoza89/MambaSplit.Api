@@ -1,8 +1,41 @@
 <!DOCTYPE html>
-<html>
-<body>
-  <p>Hello,</p>
-  <p><strong>{{inviterName}}</strong> invited you to join <strong>{{groupName}}</strong> on MambaSplit.</p>
-  <p>Accept your invitation: <a href="{{inviteLink}}">{{inviteLink}}</a></p>
-</body>
+<html lang="en">
+  <body style="margin:0; padding:0; background-color:#eef6f8; font-family:'Avenir Next','Nunito Sans','Segoe UI',sans-serif; color:#062f44;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#eef6f8; padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px; background:linear-gradient(180deg, rgba(255,255,255,0.98), rgba(244,250,252,0.96)); border:1px solid rgba(8,62,86,0.20); border-radius:16px; box-shadow:0 12px 28px rgba(6,47,68,0.14); overflow:hidden;">
+            <tr>
+              <td style="padding:28px 28px 20px; background:linear-gradient(140deg, #072f44, #1f6985);">
+                <div style="display:inline-block; margin-bottom:12px; padding:6px 10px; border-radius:999px; background:rgba(208,248,239,0.16); color:#d8fff3; font-size:12px; font-weight:800; letter-spacing:0.08em; text-transform:uppercase;">Group invite</div>
+                <h1 style="margin:0; font-size:28px; line-height:1.2; color:#f2fdf9; font-weight:800;">Join {{groupName}}</h1>
+                <p style="margin:10px 0 0; font-size:15px; line-height:1.5; color:#d4f8ee;">{{inviterName}} invited you to split expenses together on MambaSplit.</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 28px 12px;">
+                <p style="margin:0 0 14px; font-size:15px; line-height:1.6; color:#0b4763;">
+                  Open the invitation to join the group, review balances, and start tracking shared expenses in one place.
+                </p>
+                <a href="{{inviteLink}}" style="display:inline-block; background:linear-gradient(130deg, #0a4b68, #0d6788); color:#edfffb; text-decoration:none; font-weight:800; font-size:15px; line-height:1; padding:12px 18px; border-radius:12px;">
+                  Accept Invitation
+                </a>
+                <p style="margin:18px 0 0; font-size:13px; line-height:1.5; color:#2f6070;">
+                  If the button does not work, use this link:<br />
+                  <a href="{{inviteLink}}" style="color:#176784; text-decoration:underline;">{{inviteLink}}</a>
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:18px 28px 24px; border-top:1px solid rgba(8,62,86,0.12);">
+                <p style="margin:0; font-size:12px; line-height:1.5; color:#456572;">
+                  This invitation was sent because someone added your email address to a MambaSplit group.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
 </html>
