@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -15,15 +15,8 @@ public class Smtp2GoEmailSenderTests
     public async Task SendAsync_MapsPayloadAndAuthHeader()
     {
         string? capturedBody = null;
-        string[]? capturedApiKeyValues = null;
-
         var handler = new StubHttpMessageHandler(async request =>
         {
-            if (request.Headers.TryGetValues("X-Smtp2go-Api-Key", out var apiKeyValues))
-            {
-                capturedApiKeyValues = apiKeyValues.ToArray();
-            }
-
             capturedBody = await request.Content!.ReadAsStringAsync();
             return new HttpResponseMessage(HttpStatusCode.OK)
             {
@@ -42,15 +35,13 @@ public class Smtp2GoEmailSenderTests
             ["invite"]));
 
         Assert.True(result.Accepted);
-        Assert.Equal("abc123", result.ProviderMessageId);
-        Assert.NotNull(capturedApiKeyValues);
-        Assert.Contains("test-api-key", capturedApiKeyValues!);
-        Assert.False(string.IsNullOrWhiteSpace(capturedBody));
+        Assert.Equal("abc123", result.ProviderMessageId);        Assert.False(string.IsNullOrWhiteSpace(capturedBody));
 
         using var payload = JsonDocument.Parse(capturedBody!);
         Assert.Equal("from@example.com", payload.RootElement.GetProperty("sender").GetString());
         Assert.Equal("subject", payload.RootElement.GetProperty("subject").GetString());
         Assert.Equal("to@example.com", payload.RootElement.GetProperty("to")[0].GetString());
+        Assert.Equal("test-api-key", payload.RootElement.GetProperty("api_key").GetString());
     }
 
     [Fact]
