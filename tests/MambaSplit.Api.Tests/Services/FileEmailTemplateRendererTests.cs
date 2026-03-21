@@ -1,4 +1,4 @@
-using System.Text.Json.Nodes;
+﻿using System.Text.Json.Nodes;
 using MambaSplit.Api.Configuration;
 using MambaSplit.Api.Exceptions;
 using MambaSplit.Api.Services;
@@ -29,6 +29,8 @@ public class FileEmailTemplateRendererTests
             ["groupId"] = "11111111-1111-1111-1111-111111111111",
             ["inviterName"] = "Julio",
             ["inviteToken"] = "token-123",
+            ["inviteExpiresInText"] = "7 days left",
+            ["inviteExpiresAtTooltip"] = "March 24, 2026 at 8:00 PM UTC",
         };
 
         var result = renderer.Render("invite", model);
@@ -36,7 +38,40 @@ public class FileEmailTemplateRendererTests
         Assert.Contains("Trip Budget", result.Subject);
         Assert.Contains("Julio", result.HtmlBody);
         Assert.Contains("https://app.mambasplit.test/invite?token=token-123", result.HtmlBody);
+        Assert.Contains("7 days left", result.HtmlBody);
+        Assert.Contains("title=\"March 24, 2026 at 8:00 PM UTC\"", result.HtmlBody);
         Assert.Contains("Trip Budget", result.TextBody);
+    }
+
+    [Fact]
+    public void Render_InviteDeclinedTemplate_ReturnsSubjectHtmlAndText()
+    {
+        var environment = new StubWebHostEnvironment
+        {
+            ContentRootPath = FindApiContentRoot(),
+        };
+        var options = Options.Create(new EmailOptions
+        {
+            FrontendBaseUrl = "https://app.mambasplit.test",
+        });
+        var renderer = new FileEmailTemplateRenderer(environment, options);
+
+        var model = new JsonObject
+        {
+            ["groupName"] = "Trip Budget",
+            ["groupId"] = "11111111-1111-1111-1111-111111111111",
+            ["inviteeName"] = "Ana",
+            ["inviteeEmail"] = "ana@example.com",
+            ["declinedAtDisplay"] = "March 18, 2026 at 8:00 PM UTC",
+        };
+
+        var result = renderer.Render("invite-declined", model);
+
+        Assert.Contains("Trip Budget", result.Subject);
+        Assert.Contains("Ana", result.HtmlBody);
+        Assert.Contains("ana@example.com", result.HtmlBody);
+        Assert.Contains("https://app.mambasplit.test?groupId=11111111-1111-1111-1111-111111111111", result.HtmlBody);
+        Assert.Contains("March 18, 2026 at 8:00 PM UTC", result.TextBody);
     }
 
     [Fact]
@@ -96,6 +131,30 @@ public class FileEmailTemplateRendererTests
 
         var ex = Assert.Throws<ValidationException>(() => renderer.Render("invite", model));
         Assert.Contains("model.inviterName", ex.Message);
+    }
+
+    [Fact]
+    public void Render_InviteDeclinedTemplate_MissingRequiredField_ThrowsValidationException()
+    {
+        var environment = new StubWebHostEnvironment
+        {
+            ContentRootPath = FindApiContentRoot(),
+        };
+        var options = Options.Create(new EmailOptions
+        {
+            FrontendBaseUrl = "https://app.mambasplit.test",
+        });
+        var renderer = new FileEmailTemplateRenderer(environment, options);
+
+        var model = new JsonObject
+        {
+            ["groupName"] = "Trip Budget",
+            ["groupId"] = "11111111-1111-1111-1111-111111111111",
+            ["inviteeEmail"] = "ana@example.com",
+        };
+
+        var ex = Assert.Throws<ValidationException>(() => renderer.Render("invite-declined", model));
+        Assert.Contains("model.inviteeName", ex.Message);
     }
 
     [Fact]

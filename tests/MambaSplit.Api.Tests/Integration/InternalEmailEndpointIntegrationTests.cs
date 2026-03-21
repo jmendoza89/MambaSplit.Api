@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -73,6 +73,38 @@ public class InternalEmailEndpointIntegrationTests
         Assert.Equal("Welcome to MambaSplit, Julio", body!.Subject);
         Assert.Contains("Hi Julio, your account is ready.", body.HtmlBody);
         Assert.Contains("https://app.mambasplit.test", body.TextBody);
+    }
+
+    [Fact]
+    public async Task Render_InviteDeclinedTemplate_ReturnsRenderedBodies_WithoutSendingEmail()
+    {
+        var sendCallCount = 0;
+        using var factory = new InternalEmailTestFactory(_ =>
+        {
+            sendCallCount++;
+            return EmailSendResult.Success("provider-123");
+        });
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var token = await Signup(client, "internal@example.com");
+        var response = await PostRender(client, token, "invite-declined", new
+        {
+            groupName = "Trip Budget",
+            groupId = "11111111-1111-1111-1111-111111111111",
+            inviteeName = "Ana",
+            inviteeEmail = "ana@example.com",
+            declinedAtDisplay = "March 18, 2026 at 8:00 PM UTC",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, sendCallCount);
+
+        var body = await response.Content.ReadFromJsonAsync<InternalEmailRenderResponse>();
+        Assert.NotNull(body);
+        Assert.Contains("Trip Budget", body!.Subject);
+        Assert.Contains("Ana", body.HtmlBody);
+        Assert.Contains("ana@example.com", body.TextBody);
     }
 
     [Fact]
@@ -153,6 +185,8 @@ public class InternalEmailEndpointIntegrationTests
                 groupName = "Trip",
                 inviterName = "Julio",
                 inviteToken = "token-123",
+                inviteExpiresInText = "7 days left",
+                inviteExpiresAtTooltip = "March 24, 2026 at 8:00 PM UTC",
             },
             tags = new[] { "invite" },
         });

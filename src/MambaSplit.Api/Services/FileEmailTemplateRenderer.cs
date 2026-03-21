@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.Json.Nodes;
 using MambaSplit.Api.Configuration;
 using MambaSplit.Api.Exceptions;
@@ -75,6 +75,16 @@ public class FileEmailTemplateRenderer : IEmailTemplateRenderer
                 var token = Uri.EscapeDataString(tokens["inviteToken"]);
                 tokens["inviteLink"] = $"{baseUrl}/invite?token={token}";
             }
+
+            if (!tokens.ContainsKey("inviteExpiresInText"))
+            {
+                tokens["inviteExpiresInText"] = "7 days left";
+            }
+
+            if (!tokens.ContainsKey("inviteExpiresAtTooltip"))
+            {
+                tokens["inviteExpiresAtTooltip"] = "Invitation expires in 7 days";
+            }
         }
 
         if (Comparer.Equals(templateKey, "settlement"))
@@ -88,25 +98,46 @@ public class FileEmailTemplateRenderer : IEmailTemplateRenderer
                 }
             }
 
-            if (!tokens.ContainsKey("groupLink"))
+            EnsureGroupLinkToken(tokens, "settlement");
+        }
+
+        if (Comparer.Equals(templateKey, "invite-declined"))
+        {
+            var required = new[] { "groupName", "inviteeName", "inviteeEmail", "declinedAtDisplay" };
+            foreach (var field in required)
             {
-                if (!tokens.TryGetValue("groupId", out var groupId) || string.IsNullOrWhiteSpace(groupId))
+                if (!tokens.TryGetValue(field, out var value) || string.IsNullOrWhiteSpace(value))
                 {
-                    throw new ValidationException("model.groupId is required for templateKey 'settlement' when model.groupLink is not provided");
+                    throw new ValidationException($"model.{field} is required for templateKey 'invite-declined'");
                 }
-
-                if (string.IsNullOrWhiteSpace(_options.FrontendBaseUrl))
-                {
-                    throw new ValidationException("Email:FrontendBaseUrl is required for settlement template rendering");
-                }
-
-                var baseUrl = _options.FrontendBaseUrl.TrimEnd('/');
-                var encodedGroupId = Uri.EscapeDataString(groupId);
-                tokens["groupLink"] = $"{baseUrl}?groupId={encodedGroupId}";
             }
+
+            EnsureGroupLinkToken(tokens, "invite-declined");
         }
 
         return tokens;
+    }
+
+    private void EnsureGroupLinkToken(IDictionary<string, string> tokens, string templateKey)
+    {
+        if (tokens.ContainsKey("groupLink"))
+        {
+            return;
+        }
+
+        if (!tokens.TryGetValue("groupId", out var groupId) || string.IsNullOrWhiteSpace(groupId))
+        {
+            throw new ValidationException($"model.groupId is required for templateKey '{templateKey}' when model.groupLink is not provided");
+        }
+
+        if (string.IsNullOrWhiteSpace(_options.FrontendBaseUrl))
+        {
+            throw new ValidationException($"Email:FrontendBaseUrl is required for {templateKey} template rendering");
+        }
+
+        var baseUrl = _options.FrontendBaseUrl.TrimEnd('/');
+        var encodedGroupId = Uri.EscapeDataString(groupId);
+        tokens["groupLink"] = $"{baseUrl}?groupId={encodedGroupId}";
     }
 
     private static string ReplaceTokens(string template, IReadOnlyDictionary<string, string> tokens)

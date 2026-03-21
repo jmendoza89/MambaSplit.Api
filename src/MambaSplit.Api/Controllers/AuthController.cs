@@ -79,7 +79,8 @@ public record RefreshRequest([Required, NotBlank] string RefreshToken);
 public record LogoutRequest([Required, NotBlank] string RefreshToken);
 
 public record AuthResponse(string AccessToken, string RefreshToken, UserDto? User);
-public record UserDto(string Id, string Email, string DisplayName)
+public record UserDto(string Id, string Email, string DisplayName, bool HasGoogleLogin)
 {
-    public static UserDto From(UserEntity user) => new(user.Id.ToString(), user.Email, user.DisplayName);
+    public static UserDto From(UserEntity user) =>
+        new(user.Id.ToString(), user.Email, user.DisplayName, !string.IsNullOrWhiteSpace(user.GoogleSub));
 }

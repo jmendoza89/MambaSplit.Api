@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -63,13 +63,6 @@
       font-size: 14px;
     }
 
-    .preset-grid {
-      display: grid;
-      gap: 8px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      margin-bottom: 4px;
-    }
-
     label {
       display: block;
       margin: 10px 0 6px;
@@ -110,13 +103,6 @@
       font-weight: 700;
       cursor: pointer;
     }
-
-    .preset-btn {
-      margin-top: 0;
-      padding: 10px 8px;
-      font-size: 13px;
-    }
-
     button:hover {
       filter: brightness(1.05);
     }
@@ -197,11 +183,6 @@
       }
     }
 
-    @media (max-width: 480px) {
-      .preset-grid {
-        grid-template-columns: 1fr;
-      }
-    }
   </style>
 </head>
 <body>
@@ -210,12 +191,13 @@
       <h1>Email Preview Lab</h1>
       <p>Render templates without sending any email. In local Development, bearer token is optional.</p>
 
-      <label>Preset Templates</label>
-      <div class="preset-grid">
-        <button class="preset-btn" data-preset="welcome" type="button">Welcome</button>
-        <button class="preset-btn" data-preset="invite" type="button">Invite</button>
-        <button class="preset-btn" data-preset="settlement" type="button">Settlement</button>
-      </div>
+      <label for="presetSelect">Preset Template</label>
+      <select id="presetSelect">
+        <option value="welcome">Welcome</option>
+        <option value="invite">Invite</option>
+        <option value="invite-declined">Invite Declined</option>
+        <option value="settlement">Settlement</option>
+      </select>
 
       <label for="apiBase">API Base URL</label>
       <input id="apiBase" value="" placeholder="Leave blank to use current origin" />
@@ -253,6 +235,7 @@
     const textEl = document.getElementById("textBody");
     const frameEl = document.getElementById("htmlFrame");
     const renderButton = document.getElementById("renderButton");
+    const presetSelectEl = document.getElementById("presetSelect");
     const templateKeyEl = document.getElementById("templateKey");
     const subjectInputEl = document.getElementById("subject");
     const modelEl = document.getElementById("model");
@@ -270,7 +253,19 @@
         model: {
           groupName: "Weekend Trip",
           inviterName: "Julio",
-          inviteToken: "invite-token-123"
+          inviteToken: "invite-token-123",
+          inviteExpiresInText: "7 days left",
+          inviteExpiresAtTooltip: "March 24, 2026 at 8:00 PM UTC"
+        }
+      },
+      "invite-declined": {
+        templateKey: "invite-declined",
+        model: {
+          groupName: "Weekend Trip",
+          groupId: "11111111-1111-1111-1111-111111111111",
+          inviteeName: "Ana",
+          inviteeEmail: "ana@example.com",
+          declinedAtDisplay: "March 18, 2026 at 8:00 PM UTC"
         }
       },
       settlement: {
@@ -373,14 +368,13 @@
       }
     }
 
-    document.querySelectorAll("[data-preset]").forEach((button) => {
-      button.addEventListener("click", async () => {
-        applyPreset(button.dataset.preset);
-        await renderTemplate();
-      });
+    presetSelectEl.addEventListener("change", async () => {
+      applyPreset(presetSelectEl.value);
+      await renderTemplate();
     });
 
     renderButton.addEventListener("click", renderTemplate);
+    presetSelectEl.value = "welcome";
     applyPreset("welcome");
   </script>
 </body>

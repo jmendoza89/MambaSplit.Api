@@ -58,8 +58,9 @@ public class GroupController : ControllerBase
         return Ok(new InviteDto(
             invite.Token,
             invite.SentByUserId.ToString(),
+            invite.SentByEmail,
+            invite.SentByDisplayName,
             invite.SentToEmail,
-            invite.Email,
             invite.ExpiresAt.ToString("O")));
     }
 
@@ -107,13 +108,20 @@ public record GroupDto(string Id, string Name)
 }
 
 public record InviteRequest([Required, NotBlank, EmailAddress, MaxLength(320)] string Email);
-public record InviteDto(string Token, string SentByUserId, string SentToEmail, string Email, string ExpiresAt);
+public record InviteDto(
+    string Token,
+    string SentByUserId,
+    string SentByEmail,
+    string SentByDisplayName,
+    string SentToEmail,
+    string ExpiresAt);
 public record GroupInviteDto(
     string Id,
     string GroupId,
     string SentByUserId,
+    string SentByEmail,
+    string SentByDisplayName,
     string SentToEmail,
-    string Email,
     string ExpiresAt,
     string CreatedAt)
 {
@@ -121,8 +129,9 @@ public record GroupInviteDto(
         invite.Id.ToString(),
         invite.GroupId.ToString(),
         invite.SentByUserId.ToString(),
+        invite.SentByEmail,
+        invite.SentByDisplayName,
         invite.SentToEmail,
-        invite.Email,
         invite.ExpiresAt.ToString("O"),
         invite.CreatedAt.ToString("O"));
 }
