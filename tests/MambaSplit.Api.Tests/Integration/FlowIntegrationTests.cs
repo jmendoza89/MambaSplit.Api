@@ -145,7 +145,8 @@ public class FlowIntegrationTests
 
         var senderInviteList = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
         Assert.Equal(HttpStatusCode.OK, senderInviteList.StatusCode);
-        var senderInvites = await senderInviteList.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var senderInviteObj = await senderInviteList.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var senderInvites = senderInviteObj["invites"]?.AsArray() ?? new JsonArray();
         Assert.Empty(senderInvites);
 
         var declineEmail = Assert.Single(sentEmails.Where(message => message.Tags.Contains("invite-declined")));
@@ -271,7 +272,8 @@ public class FlowIntegrationTests
 
         var listAResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
         Assert.Equal(HttpStatusCode.OK, listAResponse.StatusCode);
-        var listA = await listAResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var listAObj = await listAResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var listA = listAObj["invites"]?.AsArray() ?? new JsonArray();
         Assert.Single(listA);
         Assert.Equal(userIdA, listA[0]?["sentByUserId"]?.GetValue<string>());
         Assert.Equal(emailA, listA[0]?["sentByEmail"]?.GetValue<string>());
@@ -280,7 +282,8 @@ public class FlowIntegrationTests
 
         var listBResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessB);
         Assert.Equal(HttpStatusCode.OK, listBResponse.StatusCode);
-        var listB = await listBResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var listBObj = await listBResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var listB = listBObj["invites"]?.AsArray() ?? new JsonArray();
         Assert.Single(listB);
         Assert.Equal(userIdB, listB[0]?["sentByUserId"]?.GetValue<string>());
         Assert.Equal(emailB, listB[0]?["sentByEmail"]?.GetValue<string>());
@@ -366,7 +369,8 @@ public class FlowIntegrationTests
 
         var listResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var obj = await listResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var invites = obj["invites"]?.AsArray() ?? new JsonArray();
         var inviteId = invites[0]?["id"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(inviteId));
 
@@ -391,7 +395,8 @@ public class FlowIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessA)).StatusCode);
         var listResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
-        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var obj = await listResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var invites = obj["invites"]?.AsArray() ?? new JsonArray();
         var inviteId = invites[0]?["id"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(inviteId));
 
@@ -414,7 +419,8 @@ public class FlowIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupAId}/invites", new { email = emailC }, accessA)).StatusCode);
         var listResponse = await Get(client, $"/api/v1/groups/{groupAId}/invites", accessA);
-        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var obj = await listResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var invites = obj["invites"]?.AsArray() ?? new JsonArray();
         var inviteId = invites[0]?["id"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(inviteId));
 

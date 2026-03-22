@@ -84,10 +84,10 @@ public class GroupController : ControllerBase
     }
 
     [HttpGet("{groupId}/invites")]
-    public async Task<ActionResult<List<GroupInviteDto>>> ListInvites(string groupId, CancellationToken ct)
+    public async Task<ActionResult<GroupInviteListDto>> ListInvites(string groupId, CancellationToken ct)
     {
         var invites = await _groupService.ListGroupInvitesAsync(ParseGuid(groupId, "groupId"), User.UserId(), ct);
-        return Ok(invites.Select(GroupInviteDto.From).ToList());
+        return Ok(new GroupInviteListDto(invites.Select(GroupInviteDto.From).ToList()));
     }
 
     private static Guid ParseGuid(string value, string field)
@@ -135,6 +135,8 @@ public record GroupInviteDto(
         invite.ExpiresAt.ToString("O"),
         invite.CreatedAt.ToString("O"));
 }
+
+public record GroupInviteListDto(List<GroupInviteDto> Invites);
 
 public record GroupDetailsDto(
     GroupInfoDto Group,

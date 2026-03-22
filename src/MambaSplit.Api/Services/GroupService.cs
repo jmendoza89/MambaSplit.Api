@@ -290,45 +290,92 @@ public class GroupService
         }
 
         var now = DateTimeOffset.UtcNow;
-        return await (
-            from invite in _db.Invites
-            join grp in _db.Groups on invite.GroupId equals grp.Id
-            join sender in _db.Users on invite.SentByUserId equals sender.Id
-            where invite.SentToEmail == normalizedQueryEmail && invite.ExpiresAt > now
-            orderby invite.CreatedAt descending
-            select new PendingInvite(
+        var invites = await _db.Invites
+            .Where(invite => invite.SentToEmail == normalizedQueryEmail)
+            .ToListAsync(ct);
+        var pendingInvites = invites
+            .Where(invite => invite.ExpiresAt > now)
+            .OrderByDescending(invite => invite.CreatedAt)
+            .ToList();
+
+        var groupIds = pendingInvites.Select(invite => invite.GroupId).Distinct().ToList();
+        var senderIds = pendingInvites.Select(invite => invite.SentByUserId).Distinct().ToList();
+        var groupsById = groupIds.Count == 0
+            ? new Dictionary<Guid, GroupEntity>()
+            : await _db.Groups.Where(group => groupIds.Contains(group.Id)).ToDictionaryAsync(group => group.Id, ct);
+        var sendersById = senderIds.Count == 0
+            ? new Dictionary<Guid, UserEntity>()
+            : await _db.Users.Where(user => senderIds.Contains(user.Id)).ToDictionaryAsync(user => user.Id, ct);
+
+        return pendingInvites
+            .Select(invite =>
+            {
+                if (!groupsById.TryGetValue(invite.GroupId, out var group))
+                {
+                    throw new ResourceNotFoundException("Group", invite.GroupId.ToString());
+                }
+
+                if (!sendersById.TryGetValue(invite.SentByUserId, out var sender))
+                {
+                    throw new ResourceNotFoundException("User", invite.SentByUserId.ToString());
+                }
+
+                return new PendingInvite(
                 invite.Id,
                 invite.GroupId,
-                grp.Name,
+                group.Name,
                 invite.SentByUserId,
                 sender.Email,
                 sender.DisplayName,
                 invite.SentToEmail,
                 invite.ExpiresAt,
-                invite.CreatedAt))
-            .ToListAsync(ct);
+                invite.CreatedAt);
+            })
+            .ToList();
     }
 
     public async Task<List<SentInvite>> ListSentInvitesForUserAsync(Guid senderUserId, CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
-        return await (
-            from invite in _db.Invites
-            join grp in _db.Groups on invite.GroupId equals grp.Id
-            join sender in _db.Users on invite.SentByUserId equals sender.Id
-            where invite.SentByUserId == senderUserId && invite.ExpiresAt > now
-            orderby invite.CreatedAt descending
-            select new SentInvite(
+        var sender = await _db.Users.FindAsync(new object[] { senderUserId }, ct);
+        if (sender is null)
+        {
+            throw new ResourceNotFoundException("User", senderUserId.ToString());
+        }
+
+        var invites = await _db.Invites
+            .Where(invite => invite.SentByUserId == senderUserId)
+            .ToListAsync(ct);
+        var sentInvites = invites
+            .Where(invite => invite.ExpiresAt > now)
+            .OrderByDescending(invite => invite.CreatedAt)
+            .ToList();
+
+        var groupIds = sentInvites.Select(invite => invite.GroupId).Distinct().ToList();
+        var groupsById = groupIds.Count == 0
+            ? new Dictionary<Guid, GroupEntity>()
+            : await _db.Groups.Where(group => groupIds.Contains(group.Id)).ToDictionaryAsync(group => group.Id, ct);
+
+        return sentInvites
+            .Select(invite =>
+            {
+                if (!groupsById.TryGetValue(invite.GroupId, out var group))
+                {
+                    throw new ResourceNotFoundException("Group", invite.GroupId.ToString());
+                }
+
+                return new SentInvite(
                 invite.Id,
                 invite.GroupId,
-                grp.Name,
+                group.Name,
                 invite.SentByUserId,
                 sender.Email,
                 sender.DisplayName,
                 invite.SentToEmail,
                 invite.ExpiresAt,
-                invite.CreatedAt))
-            .ToListAsync(ct);
+                invite.CreatedAt);
+            })
+            .ToList();
     }
 
     public async Task<CreatedInvite> CreateInviteAsync(
@@ -475,22 +522,30 @@ public class GroupService
     public async Task<List<GroupInvite>> ListGroupInvitesAsync(Guid groupId, Guid actorUserId, CancellationToken ct = default)
     {
         await RequireMemberAsync(groupId, actorUserId, ct);
+        var actor = await _db.Users.FindAsync(new object[] { actorUserId }, ct);
+        if (actor is null)
+        {
+            throw new ResourceNotFoundException("User", actorUserId.ToString());
+        }
+
         var now = DateTimeOffset.UtcNow;
-        return await (
-            from invite in _db.Invites
-            join sender in _db.Users on invite.SentByUserId equals sender.Id
-            where invite.GroupId == groupId && invite.SentByUserId == actorUserId && invite.ExpiresAt > now
-            orderby invite.CreatedAt descending
-            select new GroupInvite(
+        var invites = await _db.Invites
+            .Where(invite => invite.GroupId == groupId && invite.SentByUserId == actorUserId)
+            .ToListAsync(ct);
+
+        return invites
+            .Where(invite => invite.ExpiresAt > now)
+            .OrderByDescending(invite => invite.CreatedAt)
+            .Select(invite => new GroupInvite(
                 invite.Id,
                 invite.GroupId,
                 invite.SentByUserId,
-                sender.Email,
-                sender.DisplayName,
+                actor.Email,
+                actor.DisplayName,
                 invite.SentToEmail,
                 invite.ExpiresAt,
                 invite.CreatedAt))
-            .ToListAsync(ct);
+            .ToList();
     }
 
     public async Task CancelInviteAsync(Guid groupId, string rawToken, Guid actorUserId, CancellationToken ct = default)
