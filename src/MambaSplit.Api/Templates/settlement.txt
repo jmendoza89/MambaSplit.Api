@@ -1,0 +1,12 @@
+Settlement recorded in {{groupName}}
+
+{{payerName}} settled {{amountDisplay}} with {{receiverName}}.
+
+Recorded: {{settledAtDisplay}}
+Linked expenses: {{expenseCountText}}
+Note: {{noteText}}
+
+Open the group in MambaSplit:
+{{groupLink}}
+
+You are receiving this email because you participate in {{groupName}} on MambaSplit.

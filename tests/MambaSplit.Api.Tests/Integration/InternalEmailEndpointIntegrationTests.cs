@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Npgsql;
 
 namespace MambaSplit.Api.Tests.Integration;
 
@@ -73,6 +74,38 @@ public class InternalEmailEndpointIntegrationTests
         Assert.Equal("Welcome to MambaSplit, Julio", body!.Subject);
         Assert.Contains("Hi Julio, your account is ready.", body.HtmlBody);
         Assert.Contains("https://app.mambasplit.test", body.TextBody);
+    }
+
+    [Fact]
+    public async Task Render_InviteDeclinedTemplate_ReturnsRenderedBodies_WithoutSendingEmail()
+    {
+        var sendCallCount = 0;
+        using var factory = new InternalEmailTestFactory(_ =>
+        {
+            sendCallCount++;
+            return EmailSendResult.Success("provider-123");
+        });
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var token = await Signup(client, "internal@example.com");
+        var response = await PostRender(client, token, "invite-declined", new
+        {
+            groupName = "Trip Budget",
+            groupId = "11111111-1111-1111-1111-111111111111",
+            inviteeName = "Ana",
+            inviteeEmail = "ana@example.com",
+            declinedAtDisplay = "March 18, 2026 at 8:00 PM UTC",
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(0, sendCallCount);
+
+        var body = await response.Content.ReadFromJsonAsync<InternalEmailRenderResponse>();
+        Assert.NotNull(body);
+        Assert.Contains("Trip Budget", body!.Subject);
+        Assert.Contains("Ana", body.HtmlBody);
+        Assert.Contains("ana@example.com", body.TextBody);
     }
 
     [Fact]
@@ -153,6 +186,8 @@ public class InternalEmailEndpointIntegrationTests
                 groupName = "Trip",
                 inviterName = "Julio",
                 inviteToken = "token-123",
+                inviteExpiresInText = "7 days left",
+                inviteExpiresAtTooltip = "March 24, 2026 at 8:00 PM UTC",
             },
             tags = new[] { "invite" },
         });
@@ -205,6 +240,10 @@ public class InternalEmailEndpointIntegrationTests
     {
         private readonly Func<EmailSendMessage, EmailSendResult> _resultFactory;
         private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"mambasplit-email-tests-{Guid.NewGuid():N}.db");
+        private readonly string _postgresSchema = $"test_{Guid.NewGuid():N}";
+        private readonly object _postgresInitLock = new();
+        private readonly TestDatabaseProvider _databaseProvider = TestDatabaseProviderSettings.GetProvider();
+        private bool _postgresSchemaInitialized;
 
         public InternalEmailTestFactory(Func<EmailSendMessage, EmailSendResult> resultFactory)
         {
@@ -213,6 +252,7 @@ public class InternalEmailEndpointIntegrationTests
 
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
+            var connectionString = BuildConnectionString();
             builder.UseEnvironment("Test");
             builder.ConfigureAppConfiguration((_, configBuilder) =>
             {
@@ -223,7 +263,7 @@ public class InternalEmailEndpointIntegrationTests
                     ["app:security:jwt:accessTokenMinutes"] = "15",
                     ["app:security:jwt:refreshTokenDays"] = "30",
                     ["app:database:runMigrationsOnStartup"] = "false",
-                    ["ConnectionStrings:Default"] = "Host=ignored;Database=ignored;Username=ignored;Password=ignored",
+                    ["ConnectionStrings:Default"] = connectionString,
                     ["Email:Provider"] = "smtp2go",
                     ["Email:ApiBaseUrl"] = "https://api.smtp2go.com/v3",
                     ["Email:ApiKey"] = "test-key",
@@ -240,9 +280,102 @@ public class InternalEmailEndpointIntegrationTests
                 services.RemoveAll<AppDbContext>();
                 services.RemoveAll<IEmailSender>();
 
-                services.AddDbContext<AppDbContext>((_, options) => options.UseSqlite($"Data Source={_databasePath}"));
+                services.AddDbContext<AppDbContext>((_, options) =>
+                {
+                    if (_databaseProvider == TestDatabaseProvider.Postgres)
+                    {
+                        EnsurePostgresSchemaInitialized(connectionString);
+                        options.UseNpgsql(connectionString);
+                    }
+                    else
+                    {
+                        options.UseSqlite(connectionString);
+                    }
+                });
                 services.AddSingleton<IEmailSender>(new StubEmailSender(_resultFactory));
             });
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && _databaseProvider == TestDatabaseProvider.Postgres)
+            {
+                DropPostgresSchema();
+            }
+
+            base.Dispose(disposing);
+        }
+
+        private string BuildConnectionString()
+        {
+            if (_databaseProvider == TestDatabaseProvider.Postgres)
+            {
+                var baseConnectionString = TestDatabaseProviderSettings.GetPostgresConnectionString();
+                var builder = new NpgsqlConnectionStringBuilder(baseConnectionString)
+                {
+                    SearchPath = _postgresSchema,
+                };
+                return builder.ConnectionString;
+            }
+
+            return $"Data Source={_databasePath}";
+        }
+
+        private void EnsurePostgresSchemaInitialized(string connectionString)
+        {
+            if (_postgresSchemaInitialized)
+            {
+                return;
+            }
+
+            lock (_postgresInitLock)
+            {
+                if (_postgresSchemaInitialized)
+                {
+                    return;
+                }
+
+                var adminConnectionBuilder = new NpgsqlConnectionStringBuilder(connectionString)
+                {
+                    SearchPath = string.Empty,
+                };
+                using var connection = new NpgsqlConnection(adminConnectionBuilder.ConnectionString);
+                connection.Open();
+
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = $"drop schema if exists \"{_postgresSchema}\" cascade; create schema \"{_postgresSchema}\";";
+                    command.ExecuteNonQuery();
+                }
+
+                var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
+                    .UseNpgsql(connectionString)
+                    .Options;
+                using var db = new AppDbContext(dbOptions);
+                var createScript = db.Database.GenerateCreateScript();
+
+                using (var createCommand = connection.CreateCommand())
+                {
+                    createCommand.CommandText = $"set search_path to \"{_postgresSchema}\"; {createScript}";
+                    createCommand.ExecuteNonQuery();
+                }
+
+                _postgresSchemaInitialized = true;
+            }
+        }
+
+        private void DropPostgresSchema()
+        {
+            var builder = new NpgsqlConnectionStringBuilder(TestDatabaseProviderSettings.GetPostgresConnectionString())
+            {
+                SearchPath = string.Empty,
+            };
+
+            using var connection = new NpgsqlConnection(builder.ConnectionString);
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = $"drop schema if exists \"{_postgresSchema}\" cascade;";
+            command.ExecuteNonQuery();
         }
     }
 

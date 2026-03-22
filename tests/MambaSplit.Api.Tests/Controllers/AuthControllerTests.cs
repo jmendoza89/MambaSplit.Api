@@ -28,6 +28,7 @@ public class AuthControllerTests
         Assert.NotNull(payload.User);
         Assert.Equal("google@example.com", payload.User!.Email);
         Assert.Equal("Google User", payload.User.DisplayName);
+        Assert.True(payload.User.HasGoogleLogin);
         context.GoogleTokenVerifier.VerifyAll();
     }
 

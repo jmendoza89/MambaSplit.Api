@@ -172,6 +172,25 @@ public class AuthService
         await _db.SaveChangesAsync(ct);
     }
 
+    public async Task ChangePasswordAsync(
+        UserEntity user,
+        string newPassword,
+        string? currentPassword,
+        CancellationToken ct = default)
+    {
+        var hasGoogleLogin = !string.IsNullOrWhiteSpace(user.GoogleSub);
+        if (!hasGoogleLogin)
+        {
+            if (string.IsNullOrWhiteSpace(currentPassword) || !BCryptNet.Verify(currentPassword, user.PasswordHash))
+            {
+                throw new AuthenticationException("Current password is incorrect");
+            }
+        }
+
+        user.PasswordHash = BCryptNet.HashPassword(newPassword);
+        await _db.SaveChangesAsync(ct);
+    }
+
     private static UserEntity UpdateFromGoogle(UserEntity user, GoogleUser googleUser)
     {
         if (string.IsNullOrWhiteSpace(user.DisplayName))

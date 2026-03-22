@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MambaSplit.Api.Data;
+using MambaSplit.Api.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -112,6 +113,52 @@ public class FlowIntegrationTests
     }
 
     [Fact]
+    public async Task InviteDeclineById_RemovesPendingInvite_AndNotifiesSender()
+    {
+        var sentEmails = new List<EmailSendMessage>();
+        using var factory = new CustomWebApplicationFactory(_ => EmailSendResult.Success("provider-123"), sentEmails);
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, _, emailA) = await Signup(client, "Owner", "password123");
+        var (accessB, _, _, emailB) = await Signup(client, "Invitee", "password123");
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Decline Flow Group" }, accessA)))["id"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailB }, accessA)).StatusCode);
+
+        var pendingResponse = await Get(client, $"/api/v1/invites?email={Uri.EscapeDataString(emailB)}", accessB);
+        Assert.Equal(HttpStatusCode.OK, pendingResponse.StatusCode);
+        var pendingInvites = await pendingResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.Equal(emailA, pendingInvites[0]?["sentByEmail"]?.GetValue<string>());
+        Assert.Equal("Owner", pendingInvites[0]?["sentByDisplayName"]?.GetValue<string>());
+        Assert.Equal(emailB, pendingInvites[0]?["sentToEmail"]?.GetValue<string>());
+        var inviteId = pendingInvites[0]?["id"]?.GetValue<string>();
+        Assert.False(string.IsNullOrWhiteSpace(inviteId));
+
+        var decline = await PostJson(client, $"/api/v1/invites/{inviteId}/decline", new { }, accessB);
+        Assert.Equal(HttpStatusCode.OK, decline.StatusCode);
+
+        var pendingAfterDecline = await Get(client, $"/api/v1/invites?email={Uri.EscapeDataString(emailB)}", accessB);
+        Assert.Equal(HttpStatusCode.OK, pendingAfterDecline.StatusCode);
+        var remainingInvites = await pendingAfterDecline.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.Empty(remainingInvites);
+
+        var senderInviteList = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
+        Assert.Equal(HttpStatusCode.OK, senderInviteList.StatusCode);
+        var senderInviteObj = await senderInviteList.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var senderInvites = senderInviteObj["invites"]?.AsArray() ?? new JsonArray();
+        Assert.Empty(senderInvites);
+
+        var declineEmail = Assert.Single(sentEmails.Where(message => message.Tags.Contains("invite-declined")));
+        Assert.Equal(new[] { emailA }, declineEmail.To);
+        Assert.Contains("Decline Flow Group", declineEmail.Subject);
+        Assert.Contains("Invitee", declineEmail.HtmlBody);
+        Assert.Contains(emailB, declineEmail.HtmlBody);
+        Assert.Contains($"https://app.mambasplit.test?groupId={groupId}", declineEmail.HtmlBody);
+        Assert.Contains(emailB, declineEmail.TextBody);
+    }
+
+    [Fact]
     public async Task GroupDelete_OnlyOwnerCanDelete()
     {
         using var factory = new CustomWebApplicationFactory();
@@ -198,7 +245,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member", "password123");
         var (_, _, _, emailC) = await Signup(client, "Invitee C", "password123");
         var (_, _, _, emailD) = await Signup(client, "Invitee D", "password123");
@@ -211,31 +258,76 @@ public class FlowIntegrationTests
         Assert.Equal(HttpStatusCode.OK, inviteByA.StatusCode);
         var payloadByA = await ReadJsonObject(inviteByA);
         Assert.Equal(userIdA, payloadByA["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailA, payloadByA["sentByEmail"]?.GetValue<string>());
+        Assert.Equal("Owner", payloadByA["sentByDisplayName"]?.GetValue<string>());
         Assert.Equal(emailC.ToLowerInvariant(), payloadByA["sentToEmail"]?.GetValue<string>());
-        Assert.Equal(emailC.ToLowerInvariant(), payloadByA["email"]?.GetValue<string>());
 
         var inviteByB = await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailD }, accessB);
         Assert.Equal(HttpStatusCode.OK, inviteByB.StatusCode);
         var payloadByB = await ReadJsonObject(inviteByB);
         Assert.Equal(userIdB, payloadByB["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailB, payloadByB["sentByEmail"]?.GetValue<string>());
+        Assert.Equal("Member", payloadByB["sentByDisplayName"]?.GetValue<string>());
         Assert.Equal(emailD.ToLowerInvariant(), payloadByB["sentToEmail"]?.GetValue<string>());
-        Assert.Equal(emailD.ToLowerInvariant(), payloadByB["email"]?.GetValue<string>());
 
         var listAResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
         Assert.Equal(HttpStatusCode.OK, listAResponse.StatusCode);
-        var listA = await listAResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var listAObj = await listAResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var listA = listAObj["invites"]?.AsArray() ?? new JsonArray();
         Assert.Single(listA);
         Assert.Equal(userIdA, listA[0]?["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailA, listA[0]?["sentByEmail"]?.GetValue<string>());
+        Assert.Equal("Owner", listA[0]?["sentByDisplayName"]?.GetValue<string>());
         Assert.Equal(emailC.ToLowerInvariant(), listA[0]?["sentToEmail"]?.GetValue<string>());
-        Assert.Equal(emailC.ToLowerInvariant(), listA[0]?["email"]?.GetValue<string>());
 
         var listBResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessB);
         Assert.Equal(HttpStatusCode.OK, listBResponse.StatusCode);
-        var listB = await listBResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var listBObj = await listBResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var listB = listBObj["invites"]?.AsArray() ?? new JsonArray();
         Assert.Single(listB);
         Assert.Equal(userIdB, listB[0]?["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailB, listB[0]?["sentByEmail"]?.GetValue<string>());
+        Assert.Equal("Member", listB[0]?["sentByDisplayName"]?.GetValue<string>());
         Assert.Equal(emailD.ToLowerInvariant(), listB[0]?["sentToEmail"]?.GetValue<string>());
-        Assert.Equal(emailD.ToLowerInvariant(), listB[0]?["email"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Me_ReturnsReceivedAndSentInvitesForDashboard()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
+        var (accessB, _, _, emailB) = await Signup(client, "Invitee", "password123");
+        var (_, _, _, emailC) = await Signup(client, "Invitee C", "password123");
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Dashboard Invite Group" }, accessA)))["id"]!.GetValue<string>();
+
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailB }, accessA)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessA)).StatusCode);
+
+        var ownerMeResponse = await Get(client, "/api/v1/me", accessA);
+        Assert.Equal(HttpStatusCode.OK, ownerMeResponse.StatusCode);
+        var ownerMe = await ReadJsonObject(ownerMeResponse);
+        var ownerSentInvites = ownerMe["sentInvites"]?.AsArray() ?? [];
+        Assert.Equal(2, ownerSentInvites.Count);
+        Assert.Equal(userIdA, ownerSentInvites[0]?["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailA, ownerSentInvites[0]?["sentByEmail"]?.GetValue<string>());
+        Assert.Equal("Owner", ownerSentInvites[0]?["sentByDisplayName"]?.GetValue<string>());
+        Assert.Empty(ownerMe["receivedInvites"]?.AsArray() ?? []);
+
+        var inviteeMeResponse = await Get(client, "/api/v1/me", accessB);
+        Assert.Equal(HttpStatusCode.OK, inviteeMeResponse.StatusCode);
+        var inviteeMe = await ReadJsonObject(inviteeMeResponse);
+        var inviteeReceivedInvites = inviteeMe["receivedInvites"]?.AsArray() ?? [];
+        Assert.Single(inviteeReceivedInvites);
+        Assert.Equal(userIdA, inviteeReceivedInvites[0]?["sentByUserId"]?.GetValue<string>());
+        Assert.Equal(emailA, inviteeReceivedInvites[0]?["sentByEmail"]?.GetValue<string>());
+        Assert.Equal("Owner", inviteeReceivedInvites[0]?["sentByDisplayName"]?.GetValue<string>());
+        Assert.Equal(emailB, inviteeReceivedInvites[0]?["sentToEmail"]?.GetValue<string>());
+        Assert.Equal("Dashboard Invite Group", inviteeReceivedInvites[0]?["groupName"]?.GetValue<string>());
+        Assert.Empty(inviteeMe["sentInvites"]?.AsArray() ?? []);
     }
 
     [Fact]
@@ -277,7 +369,8 @@ public class FlowIntegrationTests
 
         var listResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
-        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var obj = await listResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var invites = obj["invites"]?.AsArray() ?? new JsonArray();
         var inviteId = invites[0]?["id"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(inviteId));
 
@@ -302,7 +395,8 @@ public class FlowIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailC }, accessA)).StatusCode);
         var listResponse = await Get(client, $"/api/v1/groups/{groupId}/invites", accessA);
-        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var obj = await listResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var invites = obj["invites"]?.AsArray() ?? new JsonArray();
         var inviteId = invites[0]?["id"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(inviteId));
 
@@ -325,7 +419,8 @@ public class FlowIntegrationTests
 
         Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupAId}/invites", new { email = emailC }, accessA)).StatusCode);
         var listResponse = await Get(client, $"/api/v1/groups/{groupAId}/invites", accessA);
-        var invites = await listResponse.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        var obj = await listResponse.Content.ReadFromJsonAsync<JsonObject>(JsonOptions) ?? new JsonObject();
+        var invites = obj["invites"]?.AsArray() ?? new JsonArray();
         var inviteId = invites[0]?["id"]?.GetValue<string>();
         Assert.False(string.IsNullOrWhiteSpace(inviteId));
 
@@ -380,7 +475,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member", "password123");
 
         var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Delegated Entry" }, accessA)))["id"]!.GetValue<string>();
@@ -412,7 +507,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member", "password123");
 
         var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "High Volume Group" }, accessA)))["id"]!.GetValue<string>();
@@ -448,7 +543,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
         var (accessC, _, userIdC, emailC) = await Signup(client, "Member C", "password123");
 
@@ -495,7 +590,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
         var (_, _, userIdOutsider, _) = await Signup(client, "Outsider", "password123");
 
@@ -572,7 +667,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
         var (accessC, _, userIdC, emailC) = await Signup(client, "Member C", "password123");
 
@@ -614,7 +709,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
         var (_, _, userIdOutsider, _) = await Signup(client, "Outsider", "password123");
 
@@ -675,7 +770,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
 
         var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Delete Recalc Group" }, accessA)))["id"]!.GetValue<string>();
@@ -726,7 +821,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
 
         var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Idempotent Group" }, accessA)))["id"]!.GetValue<string>();
@@ -775,7 +870,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
 
         var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Idempotency Conflict Group" }, accessA)))["id"]!.GetValue<string>();
@@ -818,7 +913,7 @@ public class FlowIntegrationTests
         using var client = factory.CreateClient();
         await EnsureDatabaseCreated(factory);
 
-        var (accessA, _, userIdA, _) = await Signup(client, "Owner", "password123");
+        var (accessA, _, userIdA, emailA) = await Signup(client, "Owner", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "Member B", "password123");
 
         var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Large Amount Group" }, accessA)))["id"]!.GetValue<string>();

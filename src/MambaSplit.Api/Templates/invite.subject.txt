@@ -1,1 +1,1 @@
-You are invited to join {{groupName}} on MambaSplit
+You're invited to join {{groupName}} on MambaSplit

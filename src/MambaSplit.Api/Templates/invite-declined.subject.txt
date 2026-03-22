@@ -1,0 +1,1 @@
+{{inviteeName}} declined your invitation to join {{groupName}}

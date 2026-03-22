@@ -35,10 +35,24 @@ public class InviteController : ControllerBase
         return Ok();
     }
 
+    [HttpPost("decline")]
+    public async Task<IActionResult> Decline([FromBody] DeclineInviteRequest request, CancellationToken ct)
+    {
+        await _groupService.DeclineInviteAsync(request.Token, User.UserId(), ct);
+        return Ok();
+    }
+
     [HttpPost("{inviteId}/accept")]
     public async Task<IActionResult> AcceptById(string inviteId, CancellationToken ct)
     {
         await _groupService.AcceptInviteByIdAsync(ParseGuid(inviteId, "inviteId"), User.UserId(), ct);
+        return Ok();
+    }
+
+    [HttpPost("{inviteId}/decline")]
+    public async Task<IActionResult> DeclineById(string inviteId, CancellationToken ct)
+    {
+        await _groupService.DeclineInviteByIdAsync(ParseGuid(inviteId, "inviteId"), User.UserId(), ct);
         return Ok();
     }
 
@@ -54,12 +68,16 @@ public class InviteController : ControllerBase
 }
 
 public record AcceptInviteRequest([Required, NotBlank] string Token);
+public record DeclineInviteRequest([Required, NotBlank] string Token);
 
 public record PendingInviteDto(
     string Id,
     string GroupId,
     string GroupName,
-    string Email,
+    string SentByUserId,
+    string SentByEmail,
+    string SentByDisplayName,
+    string SentToEmail,
     string ExpiresAt,
     string CreatedAt)
 {
@@ -67,7 +85,10 @@ public record PendingInviteDto(
         invite.Id.ToString(),
         invite.GroupId.ToString(),
         invite.GroupName,
-        invite.Email,
+        invite.SentByUserId.ToString(),
+        invite.SentByEmail,
+        invite.SentByDisplayName,
+        invite.SentToEmail,
         invite.ExpiresAt.ToString("O"),
         invite.CreatedAt.ToString("O"));
 }
