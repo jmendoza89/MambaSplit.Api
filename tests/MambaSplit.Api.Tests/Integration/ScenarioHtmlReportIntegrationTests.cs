@@ -66,37 +66,64 @@ public class ScenarioHtmlReportIntegrationTests
         }
         scenarioEvents.Add("Created 10 equal-split expenses in Group B.");
 
-        var detailsA = await GetGroupDetails(client, groupA, users[0].AccessToken);
-        var detailsB = await GetGroupDetails(client, groupB, users[1].AccessToken);
-        var expenseRowsA = detailsA["expenses"]?.AsArray() ?? [];
-        var expenseRowsB = detailsB["expenses"]?.AsArray() ?? [];
-        var expenseIdsA = expenseRowsA
-            .Select(e => e?["id"]?.GetValue<string>() ?? string.Empty)
-            .Where(id => id.Length > 0)
-            .ToList();
-        var expenseIdsB = expenseRowsB
-            .Select(e => e?["id"]?.GetValue<string>() ?? string.Empty)
-            .Where(id => id.Length > 0)
-            .ToList();
-        var settlementAmountA = expenseRowsA.Sum(e => e?["amountCents"]?.GetValue<long>() ?? 0L);
-        var settlementAmountB = expenseRowsB.Sum(e => e?["amountCents"]?.GetValue<long>() ?? 0L);
+        var gaSettleExpenseId = await CreateEqualExpenseAndGetId(
+            client,
+            groupA,
+            users[0].AccessToken,
+            users[0].UserId,
+            1000,
+            new[] { users[0].UserId, users[3].UserId },
+            "GA settle pair");
+        _ = await CreateSettlement(
+            client,
+            groupA,
+            users[3].AccessToken,
+            users[3].UserId,
+            users[0].UserId,
+            500,
+            new List<string> { gaSettleExpenseId },
+            "GA settle pair");
 
-        _ = await CreateSettlement(client, groupA, users[3].AccessToken, users[3].UserId, users[0].UserId, settlementAmountA, expenseIdsA, "GA settle all");
-        _ = await CreateSettlement(client, groupB, users[6].AccessToken, users[6].UserId, users[1].UserId, settlementAmountB, expenseIdsB, "GB settle all");
-        scenarioEvents.Add("Created full-coverage settlements for both groups (amount equals sum of selected expenses).");
+        var gbSettleExpenseId = await CreateEqualExpenseAndGetId(
+            client,
+            groupB,
+            users[1].AccessToken,
+            users[1].UserId,
+            1200,
+            new[] { users[1].UserId, users[6].UserId },
+            "GB settle pair");
+        _ = await CreateSettlement(
+            client,
+            groupB,
+            users[6].AccessToken,
+            users[6].UserId,
+            users[1].UserId,
+            600,
+            new List<string> { gbSettleExpenseId },
+            "GB settle pair");
+        scenarioEvents.Add("Created deterministic pair settlements for both groups.");
 
         var resetResponse = await AdminResetGroupSettlements(client, groupA, users[0].AccessToken);
         scenarioEvents.Add($"Admin reset settlements for Group A (deleted={resetResponse.deletedSettlementCount}, releasedExpenses={resetResponse.releasedExpenseCount}).");
 
-        var detailsAfterResetA = await GetGroupDetails(client, groupA, users[0].AccessToken);
-        var expenseRowsAfterResetA = detailsAfterResetA["expenses"]?.AsArray() ?? [];
-        var expenseIdsAfterResetA = expenseRowsAfterResetA
-            .Select(e => e?["id"]?.GetValue<string>() ?? string.Empty)
-            .Where(id => id.Length > 0)
-            .ToList();
-        var settlementAmountAfterResetA = expenseRowsAfterResetA.Sum(e => e?["amountCents"]?.GetValue<long>() ?? 0L);
-        _ = await CreateSettlement(client, groupA, users[4].AccessToken, users[4].UserId, users[2].UserId, settlementAmountAfterResetA, expenseIdsAfterResetA, "GA re-settle all");
-        scenarioEvents.Add("Re-settled all Group A expenses after admin reset.");
+        var gaResettleExpenseId = await CreateEqualExpenseAndGetId(
+            client,
+            groupA,
+            users[2].AccessToken,
+            users[2].UserId,
+            1400,
+            new[] { users[2].UserId, users[4].UserId },
+            "GA re-settle pair");
+        _ = await CreateSettlement(
+            client,
+            groupA,
+            users[4].AccessToken,
+            users[4].UserId,
+            users[2].UserId,
+            700,
+            new List<string> { gaResettleExpenseId },
+            "GA re-settle pair");
+        scenarioEvents.Add("Re-settled Group A using a deterministic pair settlement after admin reset.");
 
         var outputPath = Path.Combine(
             FindRepositoryRoot(),
@@ -269,6 +296,13 @@ public class ScenarioHtmlReportIntegrationTests
     {
         var response = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new { description, payerUserId, amountCents, participants }, bearer);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private static async Task<string> CreateEqualExpenseAndGetId(HttpClient client, string groupId, string bearer, string payerUserId, long amountCents, string[] participants, string description)
+    {
+        var response = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new { description, payerUserId, amountCents, participants }, bearer);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return (await ReadJsonObject(response))["expenseId"]!.GetValue<string>();
     }
 
     private static async Task CreateExactExpense(HttpClient client, string groupId, string bearer, string payerUserId, long amountCents, object[] items, string description)

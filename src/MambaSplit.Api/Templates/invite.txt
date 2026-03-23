@@ -1,0 +1,8 @@
+Hello,
+
+{{inviterName}} invited you to join {{groupName}} on MambaSplit.
+
+Join the group:
+{{inviteLink}}
+
+This invitation was sent because someone added your email address to a MambaSplit group.

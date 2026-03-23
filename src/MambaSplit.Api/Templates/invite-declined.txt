@@ -1,0 +1,11 @@
+Hello,
+
+{{inviteeName}} ({{inviteeEmail}}) declined your invitation to join {{groupName}} on MambaSplit.
+
+Declined at:
+{{declinedAtDisplay}}
+
+Open the group:
+{{groupLink}}
+
+You are receiving this email because you sent an invitation for this group on MambaSplit.

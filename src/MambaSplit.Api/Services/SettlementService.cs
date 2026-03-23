@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.Json.Nodes;
 using MambaSplit.Api.Data;
 using MambaSplit.Api.Domain;
 using MambaSplit.Api.Exceptions;
@@ -10,11 +12,19 @@ public class SettlementService
 {
     private readonly AppDbContext _db;
     private readonly GroupService _groupService;
+    private readonly TransactionalEmailService _transactionalEmailService;
+    private readonly ILogger<SettlementService> _logger;
 
-    public SettlementService(AppDbContext db, GroupService groupService)
+    public SettlementService(
+        AppDbContext db,
+        GroupService groupService,
+        TransactionalEmailService transactionalEmailService,
+        ILogger<SettlementService> logger)
     {
         _db = db;
         _groupService = groupService;
+        _transactionalEmailService = transactionalEmailService;
+        _logger = logger;
     }
 
     public async Task<SettlementDetails> CreateSettlementAsync(
@@ -52,10 +62,15 @@ public class SettlementService
             throw new ValidationException("Duplicate expense ids in settlement payload");
         }
 
+        if (normalizedExpenseIds.Count == 0)
+        {
+            throw new ValidationException("At least one expense must be selected");
+        }
+
         await _groupService.RequireMemberAsync(groupId, actorUserId, ct);
         await _groupService.RequireMembersAsync(groupId, new[] { fromUserId, toUserId }, ct);
 
-        EnforceDelegatedFromUserPolicy(actorUserId, fromUserId);
+        EnforceSettlementAuthorPolicy(actorUserId, fromUserId);
 
         var effectiveSettAtInput = settledAt ?? DateTimeOffset.UtcNow;
         var effectiveSettledAt = effectiveSettAtInput.ToUniversalTime();
@@ -82,26 +97,58 @@ public class SettlementService
         {
             var expenses = await _db.Expenses
                 .Where(e => e.GroupId == groupId && normalizedExpenseIds.Contains(e.Id))
-                .Select(e => new { e.Id, e.AmountCents })
+                .Select(e => new { e.Id, e.PayerUserId })
                 .ToListAsync(ct);
             if (expenses.Count != normalizedExpenseIds.Count)
             {
                 throw new ValidationException("One or more expenses do not belong to this group");
             }
 
-            long expectedAmountCents;
+            var expenseIdsSet = normalizedExpenseIds.ToHashSet();
+            var splits = await _db.ExpenseSplits
+                .Where(s => expenseIdsSet.Contains(s.ExpenseId) && (s.UserId == fromUserId || s.UserId == toUserId))
+                .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
+                .ToListAsync(ct);
+            var splitsByExpense = splits
+                .GroupBy(s => s.ExpenseId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            long expectedAmountCents = 0;
             try
             {
-                expectedAmountCents = expenses.Sum(e => e.AmountCents);
+                foreach (var expense in expenses)
+                {
+                    var expenseSplits = splitsByExpense.GetValueOrDefault(expense.Id, []);
+                    if (expense.PayerUserId == toUserId)
+                    {
+                        var fromOwed = expenseSplits
+                            .Where(s => s.UserId == fromUserId)
+                            .Sum(s => s.AmountOwedCents);
+                        expectedAmountCents = checked(expectedAmountCents + fromOwed);
+                    }
+
+                    if (expense.PayerUserId == fromUserId)
+                    {
+                        var toOwed = expenseSplits
+                            .Where(s => s.UserId == toUserId)
+                            .Sum(s => s.AmountOwedCents);
+                        expectedAmountCents = checked(expectedAmountCents - toOwed);
+                    }
+                }
             }
             catch (OverflowException)
             {
-                throw new ValidationException("Expense amount sum overflow");
+                throw new ValidationException("Settlement amount calculation overflow");
+            }
+
+            if (expectedAmountCents <= 0)
+            {
+                throw new ValidationException("Selected expenses do not produce an outstanding balance for the selected payer and receiver");
             }
 
             if (expectedAmountCents != amountCents)
             {
-                throw new ValidationException($"Settlement amount ({amountCents}) must match selected expense total ({expectedAmountCents})");
+                throw new ValidationException($"Settlement amount ({amountCents}) must match selected outstanding balance ({expectedAmountCents})");
             }
 
             var alreadySettled = await _db.SettlementExpenses
@@ -138,7 +185,9 @@ public class SettlementService
             throw new ConflictException("Settlement conflicts with current group or expense state");
         }
 
-        return await BuildSettlementDetailsResponseAsync(settlement, ct);
+        var details = await BuildSettlementDetailsResponseAsync(settlement, ct);
+        await SendSettlementEmailAsync(details, actorUserId, ct);
+        return details;
     }
 
     public async Task<SettlementDetails> GetSettlementAsync(Guid settlementId, Guid actorUserId, CancellationToken ct = default)
@@ -315,11 +364,84 @@ public class SettlementService
             expenseIds);
     }
 
-    private static void EnforceDelegatedFromUserPolicy(Guid actorUserId, Guid fromUserId)
+    private async Task SendSettlementEmailAsync(SettlementDetails settlement, Guid actorUserId, CancellationToken ct)
     {
-        // Explicit policy (current): any group member can record settlement on behalf of another member.
-        _ = actorUserId;
-        _ = fromUserId;
+        try
+        {
+            var group = await _db.Groups.FindAsync(new object[] { settlement.GroupId }, ct);
+            if (group is null)
+            {
+                _logger.LogWarning("Skipping settlement email send because group was not found. settlementId={SettlementId} groupId={GroupId}", settlement.Id, settlement.GroupId);
+                return;
+            }
+
+            var memberUserIds = await _db.GroupMembers
+                .Where(gm => gm.GroupId == settlement.GroupId)
+                .Select(gm => gm.UserId)
+                .Distinct()
+                .ToListAsync(ct);
+
+            var recipientEmails = await _db.Users
+                .Where(u => memberUserIds.Contains(u.Id) && u.Id != actorUserId && !string.IsNullOrWhiteSpace(u.Email))
+                .Select(u => u.Email)
+                .ToListAsync(ct);
+
+            var recipients = recipientEmails
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(email => email, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (recipients.Count == 0)
+            {
+                _logger.LogInformation("Skipping settlement email send because no recipients were found. settlementId={SettlementId}", settlement.Id);
+                return;
+            }
+
+            var model = new JsonObject
+            {
+                ["groupName"] = group.Name,
+                ["groupId"] = settlement.GroupId.ToString(),
+                ["payerName"] = settlement.FromUserName,
+                ["receiverName"] = settlement.ToUserName,
+                ["amountDisplay"] = FormatAmount(settlement.AmountCents),
+                ["settledAtDisplay"] = settlement.SettledAt.ToUniversalTime().ToString("MMMM d, yyyy 'at' h:mm tt 'UTC'", CultureInfo.InvariantCulture),
+                ["expenseCountText"] = FormatExpenseCount(settlement.ExpenseIds.Count),
+                ["noteText"] = string.IsNullOrWhiteSpace(settlement.Note) ? "No note was added." : settlement.Note,
+            };
+
+            await _transactionalEmailService.SendTemplateAsync(
+                "settlement",
+                recipients,
+                [],
+                [],
+                null,
+                model,
+                ["settlement", "group:" + settlement.GroupId.ToString("N")],
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Settlement email send failed for settlementId={SettlementId} groupId={GroupId}", settlement.Id, settlement.GroupId);
+        }
+    }
+
+    private static string FormatAmount(long amountCents)
+    {
+        var amount = amountCents / 100m;
+        return "$" + amount.ToString("0.00", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatExpenseCount(int expenseCount)
+    {
+        return expenseCount == 1 ? "1 linked expense" : $"{expenseCount} linked expenses";
+    }
+
+    private static void EnforceSettlementAuthorPolicy(Guid actorUserId, Guid fromUserId)
+    {
+        if (actorUserId != fromUserId)
+        {
+            throw new AuthorizationException("Not authorized to create settlement for another member");
+        }
     }
 
     private static bool IsExpenseSettlementLinkConflict(DbUpdateException ex)
@@ -341,7 +463,8 @@ public class SettlementService
         }
 
         if (pg.SqlState != PostgresErrorCodes.ForeignKeyViolation &&
-            pg.SqlState != PostgresErrorCodes.UniqueViolation)
+            pg.SqlState != PostgresErrorCodes.UniqueViolation &&
+            pg.SqlState != PostgresErrorCodes.CheckViolation)
         {
             return false;
         }

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [switch]$NoRestore,
     [switch]$SkipDocker,
     [switch]$Background,
@@ -48,8 +48,24 @@ if (-not $SkipDocker) {
         Write-Error "Docker Compose is not available. Install or enable Docker Compose, then run this script again."
     }
 
-    Write-Host "Starting Postgres container (docker compose up -d db)..."
-    docker compose up -d db
+    $existingDbContainer = docker ps -a --filter "name=^/mambasplit_db$" --format "{{.ID}}|{{.Status}}"
+    if ($existingDbContainer) {
+        $containerParts = $existingDbContainer.Split('|', 2)
+        $containerId = $containerParts[0]
+        $containerStatus = if ($containerParts.Length -gt 1) { $containerParts[1] } else { "unknown" }
+
+        if ($containerStatus -like "Up*") {
+            Write-Host "Reusing existing Postgres container mambasplit_db ($containerId)."
+        }
+        else {
+            Write-Host "Starting existing Postgres container mambasplit_db ($containerId)..."
+            docker start $containerId | Out-Null
+        }
+    }
+    else {
+        Write-Host "Starting Postgres container (docker compose up -d db)..."
+        docker compose up -d db
+    }
 }
 
 try {
@@ -68,7 +84,7 @@ if ($portInUse) {
     Write-Error "Port $($targetUri.Port) is already in use (PID(s): $pids). Stop that process or run with a different -ApiUrl."
 }
 
-$env:ASPNETCORE_ENVIRONMENT = "local"
+$env:ASPNETCORE_ENVIRONMENT = "Development"
 $env:ASPNETCORE_URLS = $ApiUrl
 
 # Avoid Event Log permission issues in restricted shells.

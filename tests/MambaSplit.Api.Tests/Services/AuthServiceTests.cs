@@ -140,4 +140,48 @@ public class AuthServiceTests
 
         Assert.Equal("Email already in use: USER@example.com", ex.Message);
     }
+
+    [Fact]
+    public async Task ChangePasswordAsync_StandardAccount_RequiresCurrentPassword()
+    {
+        await using var context = await AuthTestContext.CreateAsync();
+        var user = new UserEntity
+        {
+            Id = Guid.NewGuid(),
+            Email = "user@example.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("old-password"),
+            DisplayName = "Existing User",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        context.Db.Users.Add(user);
+        await context.Db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<AuthenticationException>(
+            () => context.AuthService.ChangePasswordAsync(user, "new-password-123", "wrong-password"));
+
+        Assert.Equal("Current password is incorrect", ex.Message);
+    }
+
+    [Fact]
+    public async Task ChangePasswordAsync_GoogleLinkedAccount_AllowsPasswordSetWithoutCurrentPassword()
+    {
+        await using var context = await AuthTestContext.CreateAsync();
+        var oldHash = BCrypt.Net.BCrypt.HashPassword("generated-password");
+        var user = new UserEntity
+        {
+            Id = Guid.NewGuid(),
+            Email = "google@example.com",
+            PasswordHash = oldHash,
+            DisplayName = "Google User",
+            GoogleSub = "google-sub-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        context.Db.Users.Add(user);
+        await context.Db.SaveChangesAsync();
+
+        await context.AuthService.ChangePasswordAsync(user, "new-password-123", null);
+
+        Assert.NotEqual(oldHash, user.PasswordHash);
+        Assert.True(BCrypt.Net.BCrypt.Verify("new-password-123", user.PasswordHash));
+    }
 }

@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Text;
 using MambaSplit.Api.Contracts;
 using MambaSplit.Api.Middleware;
@@ -14,7 +14,9 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
 builder.Services.Configure<AppSecurityOptions>(builder.Configuration.GetSection("app:security"));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("Email"));
 
 builder.Services.AddControllers();
 var corsOrigins = builder.Configuration.GetSection("app:cors:origins").Get<string[]>()
@@ -119,9 +121,13 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<IGoogleTokenVerifier, GoogleIdTokenVerifierService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<GroupMembershipService>();
 builder.Services.AddScoped<GroupService>();
 builder.Services.AddScoped<ExpenseService>();
 builder.Services.AddScoped<SettlementService>();
+builder.Services.AddScoped<IEmailTemplateRenderer, FileEmailTemplateRenderer>();
+builder.Services.AddHttpClient<IEmailSender, Smtp2GoEmailSender>();
+builder.Services.AddScoped<TransactionalEmailService>();
 
 var app = builder.Build();
 
@@ -133,6 +139,7 @@ if (runMigrationsOnStartup)
 
 app.UseMiddleware<ApiExceptionMiddleware>();
 app.UseCors("WebClient");
+app.UseStaticFiles();
 
 if (IsPublicDocsEnabled(app.Environment.EnvironmentName))
 {

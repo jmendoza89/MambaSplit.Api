@@ -73,18 +73,14 @@ public class ExpenseService
             CreatedAt = DateTimeOffset.UtcNow,
         });
 
-        var sorted = participants.OrderBy(x => x.ToString()).ToList();
-        var baseAmount = totalAmountCents / sorted.Count;
-        var remainder = totalAmountCents % sorted.Count;
-
-        for (var i = 0; i < sorted.Count; i++)
+        var splits = EqualSplitCalculator.Compute(totalAmountCents, participants);
+        foreach (var (uid, owed) in splits)
         {
-            var owed = baseAmount + (i < remainder ? 1 : 0);
             _db.ExpenseSplits.Add(new ExpenseSplitEntity
             {
                 Id = Guid.NewGuid(),
                 ExpenseId = expenseId,
-                UserId = sorted[i],
+                UserId = uid,
                 AmountOwedCents = owed,
             });
         }

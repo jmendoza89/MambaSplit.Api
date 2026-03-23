@@ -48,15 +48,30 @@ public class GroupController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("{groupId}/members/me")]
+    public async Task<IActionResult> LeaveGroup(string groupId, CancellationToken ct)
+    {
+        await _groupService.LeaveGroupAsync(ParseGuid(groupId, "groupId"), User.UserId(), ct);
+        return NoContent();
+    }
+
     [HttpPost("{groupId}/invites")]
     public async Task<ActionResult<InviteDto>> Invite(string groupId, [FromBody] InviteRequest request, CancellationToken ct)
     {
         var gid = ParseGuid(groupId, "groupId");
-        await _groupService.RequireMemberAsync(gid, User.UserId(), ct);
-        var invite = await _groupService.CreateInviteAsync(gid, request.Email, ct);
-        return Ok(new InviteDto(invite.Token, invite.Email, invite.ExpiresAt.ToString("O")));
+        var actorUserId = User.UserId();
+        await _groupService.RequireMemberAsync(gid, actorUserId, ct);
+        var invite = await _groupService.CreateInviteAsync(gid, request.Email, actorUserId, ct);
+        return Ok(new InviteDto(
+            invite.Token,
+            invite.SentByUserId.ToString(),
+            invite.SentByEmail,
+            invite.SentByDisplayName,
+            invite.SentToEmail,
+            invite.ExpiresAt.ToString("O")));
     }
 
+    // Legacy endpoint retained for backward compatibility; current clients should use cancel-by-id.
     [HttpDelete("{groupId}/invites/{token}")]
     public async Task<IActionResult> CancelInvite(string groupId, string token, CancellationToken ct)
     {
@@ -64,11 +79,22 @@ public class GroupController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("{groupId}/invites/by-id/{inviteId}")]
+    public async Task<IActionResult> CancelInviteById(string groupId, string inviteId, CancellationToken ct)
+    {
+        await _groupService.CancelInviteByIdAsync(
+            ParseGuid(groupId, "groupId"),
+            ParseGuid(inviteId, "inviteId"),
+            User.UserId(),
+            ct);
+        return NoContent();
+    }
+
     [HttpGet("{groupId}/invites")]
-    public async Task<ActionResult<List<GroupInviteDto>>> ListInvites(string groupId, CancellationToken ct)
+    public async Task<ActionResult<GroupInviteListDto>> ListInvites(string groupId, CancellationToken ct)
     {
         var invites = await _groupService.ListGroupInvitesAsync(ParseGuid(groupId, "groupId"), User.UserId(), ct);
-        return Ok(invites.Select(GroupInviteDto.From).ToList());
+        return Ok(new GroupInviteListDto(invites.Select(GroupInviteDto.From).ToList()));
     }
 
     private static Guid ParseGuid(string value, string field)
@@ -89,16 +115,35 @@ public record GroupDto(string Id, string Name)
 }
 
 public record InviteRequest([Required, NotBlank, EmailAddress, MaxLength(320)] string Email);
-public record InviteDto(string Token, string Email, string ExpiresAt);
-public record GroupInviteDto(string Id, string GroupId, string Email, string ExpiresAt, string CreatedAt)
+public record InviteDto(
+    string Token,
+    string SentByUserId,
+    string SentByEmail,
+    string SentByDisplayName,
+    string SentToEmail,
+    string ExpiresAt);
+public record GroupInviteDto(
+    string Id,
+    string GroupId,
+    string SentByUserId,
+    string SentByEmail,
+    string SentByDisplayName,
+    string SentToEmail,
+    string ExpiresAt,
+    string CreatedAt)
 {
     public static GroupInviteDto From(GroupService.GroupInvite invite) => new(
         invite.Id.ToString(),
         invite.GroupId.ToString(),
-        invite.Email,
+        invite.SentByUserId.ToString(),
+        invite.SentByEmail,
+        invite.SentByDisplayName,
+        invite.SentToEmail,
         invite.ExpiresAt.ToString("O"),
         invite.CreatedAt.ToString("O"));
 }
+
+public record GroupInviteListDto(List<GroupInviteDto> Invites);
 
 public record GroupDetailsDto(
     GroupInfoDto Group,
