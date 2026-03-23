@@ -1,0 +1,24 @@
+Introducing the new MambaSplit!
+
+Hi {{firstName}},
+
+We’ve redesigned MambaSplit to make splitting and settling expenses even easier.
+
+What’s new:
+- Modern, intuitive redesign for a smoother experience
+- Auto-rebalance: unsettled expenses are automatically rebalanced when a new member joins a group
+- Improved group management
+- Faster settlements
+- Enhanced notifications
+- Mobile-first UI
+
+See the new look:
+Main dashboard: {{screenshotMain}}
+Group details: {{screenshotGroup}}
+Settle up: {{screenshotSettle}}
+
+Try the new MambaSplit: {{appLink}}
+
+If the link above does not open, copy and paste it into your browser.
+
+You are receiving this email because you have a MambaSplit account or participate in a group.

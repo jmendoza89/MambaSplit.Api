@@ -1,0 +1,27 @@
+Introducing the New MambaSplit!
+
+Hi {{firstName}},
+
+
+We’ve redesigned MambaSplit to make splitting and settling expenses even easier.
+
+Check out our new website: https://ms.mambatech.io
+
+What’s new in this release:
+- Modern, intuitive redesign: Enjoy a refreshed look and feel across the app, with improved navigation and a more cohesive experience on all devices.
+- Members card overhaul: The group members card now features avatars, clearer roles, and a streamlined layout for adding, removing, and managing members. See everyone’s status and contributions at a glance.
+- Expenses card improvements: Expenses are now easier to scan and understand, with a new card design that highlights who paid, who owes, and the split details. Quickly add, edit, or settle expenses with fewer taps.
+- Auto-rebalance: When a new member joins a group, unsettled expenses are automatically rebalanced, so everyone’s share is always up to date.
+- Faster settlements: The settlement flow is now more intuitive, making it simple to record payments and keep group balances accurate.
+- Enhanced notifications: Get real-time updates when expenses are added, settled, or when group changes occur—never miss an important update.
+- Mobile-first UI: Optimized layouts and touch targets for seamless use on any device, whether you’re at home or on the go.
+
+See the new look:
+Main dashboard: {{screenshotMain}}
+Group details: {{screenshotGroup}}
+
+Try the new MambaSplit: {{appLink}}
+
+If the link above does not open, copy and paste it into your browser.
+
+You are receiving this email because you have a MambaSplit account or participate in a group.
