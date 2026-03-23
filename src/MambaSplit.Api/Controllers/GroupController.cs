@@ -48,6 +48,13 @@ public class GroupController : ControllerBase
         return NoContent();
     }
 
+    [HttpDelete("{groupId}/members/me")]
+    public async Task<IActionResult> LeaveGroup(string groupId, CancellationToken ct)
+    {
+        await _groupService.LeaveGroupAsync(ParseGuid(groupId, "groupId"), User.UserId(), ct);
+        return NoContent();
+    }
+
     [HttpPost("{groupId}/invites")]
     public async Task<ActionResult<InviteDto>> Invite(string groupId, [FromBody] InviteRequest request, CancellationToken ct)
     {
