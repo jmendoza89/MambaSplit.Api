@@ -6,6 +6,7 @@ using MambaSplit.Api.Services;
 using MambaSplit.Api.Validation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using MambaSplit.Api.Configuration;
 
@@ -21,17 +22,83 @@ public class InternalEmailController : ControllerBase
     private readonly IEmailTemplateRenderer _templateRenderer;
     private readonly EmailOptions _emailOptions;
     private readonly IWebHostEnvironment _environment;
+    private readonly Data.AppDbContext _db;
 
     public InternalEmailController(
         TransactionalEmailService emailService,
         IEmailTemplateRenderer templateRenderer,
         IOptions<EmailOptions> emailOptions,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        Data.AppDbContext db)
     {
         _emailService = emailService;
         _templateRenderer = templateRenderer;
         _emailOptions = emailOptions.Value;
         _environment = environment;
+        _db = db;
+    }
+    [HttpPost("send-release-v1.2.0")]
+    public async Task<ActionResult> SendReleaseV120(CancellationToken ct)
+    {
+        EnsureInternalAccess();
+
+        // Query all users
+        var users = await _db.Users.AsNoTracking().ToListAsync(ct);
+        if (users.Count == 0)
+        {
+            return Ok(new { sent = 0, message = "No users found." });
+        }
+
+        // Prepare static tokens
+        var assetBaseUrl = $"{Request.Scheme}://{Request.Host}";
+        var appLink = "https://ms.mambatech.io";
+        var screenshotMain = $"{assetBaseUrl}/internal/email-preview-assets/screenshotMain.png";
+        var screenshotGroup = $"{assetBaseUrl}/internal/email-preview-assets/screenshotGroup.png";
+
+        int sent = 0;
+        var errors = new List<string>();
+        foreach (var user in users)
+        {
+            if (string.IsNullOrWhiteSpace(user.Email)) continue;
+            var firstName = !string.IsNullOrWhiteSpace(user.DisplayName)
+                ? user.DisplayName.Split(' ', 2)[0]
+                : user.Email.Split('@')[0];
+
+            var model = new JsonObject
+            {
+                ["firstName"] = firstName,
+                ["appLink"] = appLink,
+                ["screenshotMain"] = screenshotMain,
+                ["screenshotGroup"] = screenshotGroup
+            };
+
+            try
+            {
+                var result = await _emailService.SendTemplateAsync(
+                    "release-v1.2.0",
+                    new[] { user.Email },
+                    null,
+                    null,
+                    null,
+                    model,
+                    null,
+                    ct);
+                if (result.Accepted)
+                {
+                    sent++;
+                }
+                else
+                {
+                    errors.Add($"{user.Email}: {result.ErrorMessage ?? result.ErrorCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                errors.Add($"{user.Email}: {ex.Message}");
+            }
+        }
+
+        return Ok(new { sent, total = users.Count, errors });
     }
 
     [AllowAnonymous]
