@@ -121,6 +121,7 @@ builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(connect
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<IGoogleTokenVerifier, GoogleIdTokenVerifierService>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<GroupMembershipService>();
 builder.Services.AddScoped<GroupService>();
 builder.Services.AddScoped<ExpenseService>();
 builder.Services.AddScoped<SettlementService>();

@@ -62,6 +62,109 @@ public class FlowIntegrationTests
     }
 
     [Fact]
+    public async Task AuthEndpoints_TreatSqlInjectionPayloadsAsPlainInput()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        const string password = "password123";
+        const string wrongPasswordPayload = "' OR 1=1 --";
+        var email = $"user_{Guid.NewGuid()}@example.com";
+
+        var signup = await PostJson(client, "/api/v1/auth/signup", new
+        {
+            email,
+            password,
+            displayName = "Safe User",
+        });
+        Assert.Equal(HttpStatusCode.OK, signup.StatusCode);
+
+        var validLogin = await PostJson(client, "/api/v1/auth/login", new { email, password });
+        Assert.Equal(HttpStatusCode.OK, validLogin.StatusCode);
+        var validPayload = await ReadJsonObject(validLogin);
+        var validRefreshToken = validPayload["refreshToken"]!.GetValue<string>();
+
+        var injectedPasswordLogin = await PostJson(client, "/api/v1/auth/login", new
+        {
+            email,
+            password = wrongPasswordPayload,
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, injectedPasswordLogin.StatusCode);
+
+        var injectedEmailLogin = await PostJson(client, "/api/v1/auth/login", new
+        {
+            email = $"anything' OR '1'='1@example.com",
+            password,
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, injectedEmailLogin.StatusCode);
+
+        var injectedRefresh = await PostJson(client, "/api/v1/auth/refresh", new
+        {
+            refreshToken = $"{validRefreshToken}' OR 1=1 --",
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, injectedRefresh.StatusCode);
+
+        var validRefreshAfterAttack = await PostJson(client, "/api/v1/auth/refresh", new
+        {
+            refreshToken = validRefreshToken,
+        });
+        Assert.Equal(HttpStatusCode.OK, validRefreshAfterAttack.StatusCode);
+    }
+
+    [Fact]
+    public async Task SearchAndInviteQueries_TreatSqlInjectionPayloadsAsPlainInput()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        const string password = "password123";
+        var (accessA, _, _, _) = await Signup(client, "Owner", password);
+        var (accessB, _, _, emailB) = await Signup(client, "Member B", password);
+        var (_, _, _, emailC) = await Signup(client, "Member C", password);
+
+        var groupId = (await ReadJsonObject(await PostJson(client, "/api/v1/groups", new { name = "Injection Guard Group" }, accessA)))["id"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, $"/api/v1/groups/{groupId}/invites", new { email = emailB }, accessA)).StatusCode);
+
+        var baselineSearch = await Get(client, "/api/v1/users/search?q=member", accessA);
+        Assert.Equal(HttpStatusCode.OK, baselineSearch.StatusCode);
+        var baselineUsers = await baselineSearch.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.True(baselineUsers.Count >= 2);
+
+        var injectedSearch = await Get(client, $"/api/v1/users/search?q={Uri.EscapeDataString("' OR 1=1 --")}", accessA);
+        Assert.Equal(HttpStatusCode.OK, injectedSearch.StatusCode);
+        var injectedUsers = await injectedSearch.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.Empty(injectedUsers);
+
+        var groupScopedInjectedSearch = await Get(
+            client,
+            $"/api/v1/users/search?groupId={groupId}&q={Uri.EscapeDataString("' OR 1=1 --")}",
+            accessA);
+        Assert.Equal(HttpStatusCode.OK, groupScopedInjectedSearch.StatusCode);
+        var groupScopedUsers = await groupScopedInjectedSearch.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.Empty(groupScopedUsers);
+
+        var pendingInvites = await Get(client, $"/api/v1/invites?email={Uri.EscapeDataString(emailB)}", accessB);
+        Assert.Equal(HttpStatusCode.OK, pendingInvites.StatusCode);
+        var pendingPayload = await pendingInvites.Content.ReadFromJsonAsync<JsonArray>(JsonOptions) ?? new JsonArray();
+        Assert.Single(pendingPayload);
+        Assert.Equal(emailB, pendingPayload[0]?["sentToEmail"]?.GetValue<string>());
+
+        var injectedInviteLookup = await Get(
+            client,
+            $"/api/v1/invites?email={Uri.EscapeDataString($"{emailB}' OR '1'='1")}",
+            accessA);
+        Assert.Equal(HttpStatusCode.Forbidden, injectedInviteLookup.StatusCode);
+
+        var otherInjectedInviteLookup = await Get(
+            client,
+            $"/api/v1/invites?email={Uri.EscapeDataString($"{emailC}' OR '1'='1")}",
+            accessA);
+        Assert.Equal(HttpStatusCode.Forbidden, otherInjectedInviteLookup.StatusCode);
+    }
+
+    [Fact]
     public async Task GroupInviteAcceptCreateExpenseAndDetailsFlow_Works()
     {
         using var factory = new CustomWebApplicationFactory();

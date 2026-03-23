@@ -13,11 +13,14 @@ public class GroupService
     private readonly TransactionalEmailService _transactionalEmailService;
     private readonly ILogger<GroupService> _logger;
 
-    public GroupService(AppDbContext db, TransactionalEmailService transactionalEmailService, ILogger<GroupService> logger)
+    private readonly GroupMembershipService _groupMembershipService;
+
+    public GroupService(AppDbContext db, TransactionalEmailService transactionalEmailService, ILogger<GroupService> logger, GroupMembershipService groupMembershipService)
     {
         _db = db;
         _transactionalEmailService = transactionalEmailService;
         _logger = logger;
+        _groupMembershipService = groupMembershipService;
     }
 
     public async Task<GroupEntity> CreateGroupAsync(Guid creatorUserId, string name, CancellationToken ct = default)
@@ -118,6 +121,20 @@ public class GroupService
         var splitsByExpense = splitRows.GroupBy(s => s.ExpenseId).ToDictionary(g => g.Key, g => g.ToList());
 
         var netByUserId = memberUserIds.ToDictionary(id => id, _ => 0L);
+
+        // Ensure all users referenced in historical data have an entry so that
+        // departed members (whose splits in settled or reversed expenses were not
+        // rebalanced) do not cause KeyNotFoundException.
+        foreach (var expense in allGroupExpenses)
+            netByUserId.TryAdd(expense.PayerUserId, 0L);
+        foreach (var split in splitRows)
+            netByUserId.TryAdd(split.UserId, 0L);
+        foreach (var settlement in allGroupSettlements)
+        {
+            netByUserId.TryAdd(settlement.FromUserId, 0L);
+            netByUserId.TryAdd(settlement.ToUserId, 0L);
+        }
+
         foreach (var expense in allGroupExpenses)
         {
             netByUserId[expense.PayerUserId] = CheckedAdd(
@@ -242,6 +259,13 @@ public class GroupService
 
         _db.Groups.Remove(group);
         await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task LeaveGroupAsync(Guid groupId, Guid userId, CancellationToken ct = default)
+    {
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+        await _groupMembershipService.RemoveMemberAndRebalanceAsync(groupId, userId, ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task RequireMemberAsync(Guid groupId, Guid userId, CancellationToken ct = default)
@@ -622,6 +646,8 @@ public class GroupService
             throw new ValidationException("Invite email does not match authenticated user");
         }
 
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
         var deleted = await _db.Database.ExecuteSqlInterpolatedAsync(
             $@"delete from invites where token_hash = {tokenHash}", ct);
         if (deleted == 0)
@@ -629,20 +655,9 @@ public class GroupService
             throw new ConflictException("Invite already used");
         }
 
-        var membership = await _db.GroupMembers
-            .FirstOrDefaultAsync(m => m.GroupId == invite.GroupId && m.UserId == userId, ct);
-        if (membership is null)
-        {
-            _db.GroupMembers.Add(new GroupMemberEntity
-            {
-                Id = Guid.NewGuid(),
-                GroupId = invite.GroupId,
-                UserId = userId,
-                Role = Role.MEMBER,
-                JoinedAt = DateTimeOffset.UtcNow,
-            });
-            await _db.SaveChangesAsync(ct);
-        }
+        await _groupMembershipService.AddMemberAndRebalanceAsync(invite.GroupId, userId, Role.MEMBER, ct);
+
+        await tx.CommitAsync(ct);
     }
 
     public async Task AcceptInviteByIdAsync(Guid inviteId, Guid userId, CancellationToken ct = default)
@@ -669,6 +684,8 @@ public class GroupService
             throw new ValidationException("Invite email does not match authenticated user");
         }
 
+        await using var tx = await _db.Database.BeginTransactionAsync(ct);
+
         var deleted = await _db.Database.ExecuteSqlInterpolatedAsync(
             $@"delete from invites where id = {invite.Id} and token_hash = {invite.TokenHash}",
             ct);
@@ -677,20 +694,9 @@ public class GroupService
             throw new ConflictException("Invite already used");
         }
 
-        var membership = await _db.GroupMembers
-            .FirstOrDefaultAsync(m => m.GroupId == invite.GroupId && m.UserId == userId, ct);
-        if (membership is null)
-        {
-            _db.GroupMembers.Add(new GroupMemberEntity
-            {
-                Id = Guid.NewGuid(),
-                GroupId = invite.GroupId,
-                UserId = userId,
-                Role = Role.MEMBER,
-                JoinedAt = DateTimeOffset.UtcNow,
-            });
-            await _db.SaveChangesAsync(ct);
-        }
+        await _groupMembershipService.AddMemberAndRebalanceAsync(invite.GroupId, userId, Role.MEMBER, ct);
+
+        await tx.CommitAsync(ct);
     }
 
     public async Task DeclineInviteAsync(string rawToken, Guid userId, CancellationToken ct = default)
