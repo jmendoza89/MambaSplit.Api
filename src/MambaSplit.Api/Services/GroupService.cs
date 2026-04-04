@@ -14,13 +14,15 @@ public class GroupService
     private readonly ILogger<GroupService> _logger;
 
     private readonly GroupMembershipService _groupMembershipService;
+    private readonly FriendService _friendService;
 
-    public GroupService(AppDbContext db, TransactionalEmailService transactionalEmailService, ILogger<GroupService> logger, GroupMembershipService groupMembershipService)
+    public GroupService(AppDbContext db, TransactionalEmailService transactionalEmailService, ILogger<GroupService> logger, GroupMembershipService groupMembershipService, FriendService friendService)
     {
         _db = db;
         _transactionalEmailService = transactionalEmailService;
         _logger = logger;
         _groupMembershipService = groupMembershipService;
+        _friendService = friendService;
     }
 
     public async Task<GroupEntity> CreateGroupAsync(Guid creatorUserId, string name, CancellationToken ct = default)
@@ -658,6 +660,8 @@ public class GroupService
         await _groupMembershipService.AddMemberAndRebalanceAsync(invite.GroupId, userId, Role.MEMBER, ct);
 
         await tx.CommitAsync(ct);
+
+        await _friendService.UpsertOnInviteAcceptedAsync(invite.SentByUserId, userId, ct);
     }
 
     public async Task AcceptInviteByIdAsync(Guid inviteId, Guid userId, CancellationToken ct = default)
@@ -697,6 +701,8 @@ public class GroupService
         await _groupMembershipService.AddMemberAndRebalanceAsync(invite.GroupId, userId, Role.MEMBER, ct);
 
         await tx.CommitAsync(ct);
+
+        await _friendService.UpsertOnInviteAcceptedAsync(invite.SentByUserId, userId, ct);
     }
 
     public async Task DeclineInviteAsync(string rawToken, Guid userId, CancellationToken ct = default)

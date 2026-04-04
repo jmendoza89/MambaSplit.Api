@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<SettlementEntity> Settlements => Set<SettlementEntity>();
     public DbSet<SettlementExpenseEntity> SettlementExpenses => Set<SettlementExpenseEntity>();
     public DbSet<RefreshTokenEntity> RefreshTokens => Set<RefreshTokenEntity>();
+    public DbSet<FriendConnectionEntity> FriendConnections => Set<FriendConnectionEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -91,5 +92,24 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<GroupMemberEntity>()
             .Property(x => x.Role)
             .HasConversion<string>();
+
+        modelBuilder.Entity<FriendConnectionEntity>()
+            .HasIndex(x => new { x.OwnerUserId, x.NormalizedEmail })
+            .IsUnique();
+
+        modelBuilder.Entity<FriendConnectionEntity>()
+            .HasIndex(x => x.OwnerUserId);
+
+        modelBuilder.Entity<FriendConnectionEntity>()
+            .HasOne<UserEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.OwnerUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<FriendConnectionEntity>()
+            .HasOne<UserEntity>()
+            .WithMany()
+            .HasForeignKey(x => x.FriendUserId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }
