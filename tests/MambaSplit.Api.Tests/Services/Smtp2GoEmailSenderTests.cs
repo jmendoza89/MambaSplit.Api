@@ -35,10 +35,12 @@ public class Smtp2GoEmailSenderTests
             ["invite"]));
 
         Assert.True(result.Accepted);
-        Assert.Equal("abc123", result.ProviderMessageId);        Assert.False(string.IsNullOrWhiteSpace(capturedBody));
+        Assert.Equal("abc123", result.ProviderMessageId);
+        Assert.False(string.IsNullOrWhiteSpace(capturedBody));
 
         using var payload = JsonDocument.Parse(capturedBody!);
-        Assert.Equal("from@example.com", payload.RootElement.GetProperty("sender").GetString());
+        Assert.Equal("MambaSplit <from@example.com>", payload.RootElement.GetProperty("sender").GetString());
+        Assert.False(payload.RootElement.TryGetProperty("sender_name", out _));
         Assert.Equal("subject", payload.RootElement.GetProperty("subject").GetString());
         Assert.Equal("to@example.com", payload.RootElement.GetProperty("to")[0].GetString());
         Assert.Equal("test-api-key", payload.RootElement.GetProperty("api_key").GetString());

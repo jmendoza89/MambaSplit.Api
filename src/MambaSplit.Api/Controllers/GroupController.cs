@@ -14,10 +14,12 @@ namespace MambaSplit.Api.Controllers;
 public class GroupController : ControllerBase
 {
     private readonly GroupService _groupService;
+    private readonly FriendService _friendService;
 
-    public GroupController(GroupService groupService)
+    public GroupController(GroupService groupService, FriendService friendService)
     {
         _groupService = groupService;
+        _friendService = friendService;
     }
 
     [HttpPost]
@@ -62,6 +64,9 @@ public class GroupController : ControllerBase
         var actorUserId = User.UserId();
         await _groupService.RequireMemberAsync(gid, actorUserId, ct);
         var invite = await _groupService.CreateInviteAsync(gid, request.Email, actorUserId, ct);
+
+        await _friendService.UpsertOnInviteSentAsync(actorUserId, request.Email, request.DisplayName, ct);
+
         return Ok(new InviteDto(
             invite.Token,
             invite.SentByUserId.ToString(),
@@ -114,7 +119,7 @@ public record GroupDto(string Id, string Name)
     public static GroupDto From(GroupEntity group) => new(group.Id.ToString(), group.Name);
 }
 
-public record InviteRequest([Required, NotBlank, EmailAddress, MaxLength(320)] string Email);
+public record InviteRequest([Required, NotBlank, EmailAddress, MaxLength(320)] string Email, [MaxLength(120)] string? DisplayName = null);
 public record InviteDto(
     string Token,
     string SentByUserId,

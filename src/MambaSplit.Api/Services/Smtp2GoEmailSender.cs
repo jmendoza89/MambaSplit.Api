@@ -34,6 +34,9 @@ public class Smtp2GoEmailSender : IEmailSender
         }
 
         var endpoint = _options.ApiBaseUrl.TrimEnd('/') + "/email/send";
+        var sender = string.IsNullOrWhiteSpace(_options.FromName)
+            ? _options.FromEmail
+            : $"{_options.FromName.Trim()} <{_options.FromEmail.Trim()}>";
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             try
@@ -43,8 +46,7 @@ public class Smtp2GoEmailSender : IEmailSender
                     Content = JsonContent.Create(new
                     {
                         api_key = _options.ApiKey,
-                        sender = _options.FromEmail,
-                        sender_name = _options.FromName,
+                        sender,
                         to = message.To,
                         cc = message.Cc,
                         bcc = message.Bcc,

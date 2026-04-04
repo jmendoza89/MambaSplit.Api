@@ -123,6 +123,7 @@ builder.Services.AddScoped<IGoogleTokenVerifier, GoogleIdTokenVerifierService>()
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<GroupMembershipService>();
 builder.Services.AddScoped<GroupService>();
+builder.Services.AddScoped<FriendService>();
 builder.Services.AddScoped<ExpenseService>();
 builder.Services.AddScoped<SettlementService>();
 builder.Services.AddScoped<IEmailTemplateRenderer, FileEmailTemplateRenderer>();
