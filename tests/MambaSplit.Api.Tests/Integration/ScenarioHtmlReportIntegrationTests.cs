@@ -313,7 +313,36 @@ public class ScenarioHtmlReportIntegrationTests
 
     private static async Task<string> CreateSettlement(HttpClient client, string groupId, string bearer, string fromUserId, string toUserId, long amountCents, List<string> expenseIds, string note)
     {
-        var response = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new { fromUserId, toUserId, amountCents, expenseIds, note, settledAt = DateTimeOffset.UtcNow.ToString("O") }, bearer);
+        // Backend auto-selects all unsettled pair expenses and validates amountCents against the
+        // computed net balance. Compute that same balance from group details so the value matches.
+        var detailsResponse = await client.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"/api/v1/groups/{groupId}/details")
+        {
+            Headers = { Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", bearer) },
+        });
+        var details = await ReadJsonObject(detailsResponse);
+
+        long pairBalance = 0;
+        foreach (var expense in details["expenses"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray())
+        {
+            if (expense?["settlementId"] != null) continue;
+            var payerUserId = expense?["payerUserId"]?.GetValue<string>();
+            var splits = expense?["splits"]?.AsArray() ?? new System.Text.Json.Nodes.JsonArray();
+            if (payerUserId == toUserId)
+            {
+                pairBalance += splits
+                    .Where(s => s?["userId"]?.GetValue<string>() == fromUserId)
+                    .Sum(s => s?["amountOwedCents"]?.GetValue<long>() ?? 0L);
+            }
+            else if (payerUserId == fromUserId)
+            {
+                pairBalance -= splits
+                    .Where(s => s?["userId"]?.GetValue<string>() == toUserId)
+                    .Sum(s => s?["amountOwedCents"]?.GetValue<long>() ?? 0L);
+            }
+        }
+
+        var resolvedAmount = pairBalance > 0 ? pairBalance : amountCents;
+        var response = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new { fromUserId, toUserId, amountCents = resolvedAmount, note, settledAt = DateTimeOffset.UtcNow.ToString("O") }, bearer);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await ReadJsonObject(response))["settlementId"]!.GetValue<string>();
     }
