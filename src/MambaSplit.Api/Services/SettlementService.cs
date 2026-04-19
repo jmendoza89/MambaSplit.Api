@@ -33,15 +33,10 @@ public class SettlementService
         Guid fromUserId,
         Guid toUserId,
         long amountCents,
-        List<Guid> expenseIds,
         string? note = null,
         DateTimeOffset? settledAt = null,
         CancellationToken ct = default)
     {
-        var normalizedExpenseIds = expenseIds
-            .Where(id => id != Guid.Empty)
-            .ToList();
-
         if (amountCents <= 0)
         {
             throw new ValidationException("Amount must be greater than 0");
@@ -57,16 +52,6 @@ public class SettlementService
             throw new ValidationException("Settlement note cannot exceed 500 characters");
         }
 
-        if (normalizedExpenseIds.Distinct().Count() != normalizedExpenseIds.Count)
-        {
-            throw new ValidationException("Duplicate expense ids in settlement payload");
-        }
-
-        if (normalizedExpenseIds.Count == 0)
-        {
-            throw new ValidationException("At least one expense must be selected");
-        }
-
         await _groupService.RequireMemberAsync(groupId, actorUserId, ct);
         await _groupService.RequireMembersAsync(groupId, new[] { fromUserId, toUserId }, ct);
 
@@ -78,6 +63,83 @@ public class SettlementService
         if (effectiveSettledAt > now.AddMinutes(5))
         {
             throw new ValidationException("Settlement date cannot be in the future");
+        }
+
+        // Auto-select all unsettled expenses that are pair-relevant:
+        // expenses paid by toUserId where fromUserId has a split (fromUser owes toUser),
+        // and expenses paid by fromUserId where toUserId has a split (netted off in the opposite direction).
+        var alreadyLinkedList = await _db.SettlementExpenses
+            .Select(se => se.ExpenseId)
+            .Distinct()
+            .ToListAsync(ct);
+        var alreadyLinkedExpenseIds = alreadyLinkedList.ToHashSet();
+
+        var candidateExpenses = await _db.Expenses
+            .Where(e => e.GroupId == groupId
+                && !alreadyLinkedExpenseIds.Contains(e.Id)
+                && (e.PayerUserId == toUserId || e.PayerUserId == fromUserId))
+            .Select(e => new { e.Id, e.PayerUserId })
+            .ToListAsync(ct);
+
+        var candidateIds = candidateExpenses.Select(e => e.Id).ToHashSet();
+        var splits = await _db.ExpenseSplits
+            .Where(s => candidateIds.Contains(s.ExpenseId) && (s.UserId == fromUserId || s.UserId == toUserId))
+            .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
+            .ToListAsync(ct);
+
+        var splitsByExpense = splits
+            .GroupBy(s => s.ExpenseId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Only include expenses that actually have a non-zero split for this pair.
+        var pairExpenses = candidateExpenses
+            .Where(e =>
+            {
+                var expSplits = splitsByExpense.GetValueOrDefault(e.Id, []);
+                if (e.PayerUserId == toUserId)
+                    return expSplits.Any(s => s.UserId == fromUserId && s.AmountOwedCents > 0);
+                if (e.PayerUserId == fromUserId)
+                    return expSplits.Any(s => s.UserId == toUserId && s.AmountOwedCents > 0);
+                return false;
+            })
+            .ToList();
+
+        long expectedAmountCents = 0;
+        try
+        {
+            foreach (var expense in pairExpenses)
+            {
+                var expenseSplits = splitsByExpense.GetValueOrDefault(expense.Id, []);
+                if (expense.PayerUserId == toUserId)
+                {
+                    var fromOwed = expenseSplits
+                        .Where(s => s.UserId == fromUserId)
+                        .Sum(s => s.AmountOwedCents);
+                    expectedAmountCents = checked(expectedAmountCents + fromOwed);
+                }
+
+                if (expense.PayerUserId == fromUserId)
+                {
+                    var toOwed = expenseSplits
+                        .Where(s => s.UserId == toUserId)
+                        .Sum(s => s.AmountOwedCents);
+                    expectedAmountCents = checked(expectedAmountCents - toOwed);
+                }
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new ValidationException("Settlement amount calculation overflow");
+        }
+
+        if (expectedAmountCents <= 0)
+        {
+            throw new ValidationException("No outstanding balance exists for this pair");
+        }
+
+        if (expectedAmountCents != amountCents)
+        {
+            throw new ValidationException($"Settlement amount ({amountCents}) does not match outstanding pair balance ({expectedAmountCents})");
         }
 
         var settlement = new SettlementEntity
@@ -93,83 +155,14 @@ public class SettlementService
 
         _db.Settlements.Add(settlement);
 
-        if (normalizedExpenseIds.Count > 0)
+        foreach (var expense in pairExpenses)
         {
-            var expenses = await _db.Expenses
-                .Where(e => e.GroupId == groupId && normalizedExpenseIds.Contains(e.Id))
-                .Select(e => new { e.Id, e.PayerUserId })
-                .ToListAsync(ct);
-            if (expenses.Count != normalizedExpenseIds.Count)
+            _db.SettlementExpenses.Add(new SettlementExpenseEntity
             {
-                throw new ValidationException("One or more expenses do not belong to this group");
-            }
-
-            var expenseIdsSet = normalizedExpenseIds.ToHashSet();
-            var splits = await _db.ExpenseSplits
-                .Where(s => expenseIdsSet.Contains(s.ExpenseId) && (s.UserId == fromUserId || s.UserId == toUserId))
-                .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
-                .ToListAsync(ct);
-            var splitsByExpense = splits
-                .GroupBy(s => s.ExpenseId)
-                .ToDictionary(g => g.Key, g => g.ToList());
-
-            long expectedAmountCents = 0;
-            try
-            {
-                foreach (var expense in expenses)
-                {
-                    var expenseSplits = splitsByExpense.GetValueOrDefault(expense.Id, []);
-                    if (expense.PayerUserId == toUserId)
-                    {
-                        var fromOwed = expenseSplits
-                            .Where(s => s.UserId == fromUserId)
-                            .Sum(s => s.AmountOwedCents);
-                        expectedAmountCents = checked(expectedAmountCents + fromOwed);
-                    }
-
-                    if (expense.PayerUserId == fromUserId)
-                    {
-                        var toOwed = expenseSplits
-                            .Where(s => s.UserId == toUserId)
-                            .Sum(s => s.AmountOwedCents);
-                        expectedAmountCents = checked(expectedAmountCents - toOwed);
-                    }
-                }
-            }
-            catch (OverflowException)
-            {
-                throw new ValidationException("Settlement amount calculation overflow");
-            }
-
-            if (expectedAmountCents <= 0)
-            {
-                throw new ValidationException("Selected expenses do not produce an outstanding balance for the selected payer and receiver");
-            }
-
-            if (expectedAmountCents != amountCents)
-            {
-                throw new ValidationException($"Settlement amount ({amountCents}) must match selected outstanding balance ({expectedAmountCents})");
-            }
-
-            var alreadySettled = await _db.SettlementExpenses
-                .Where(se => normalizedExpenseIds.Contains(se.ExpenseId))
-                .Select(se => se.ExpenseId)
-                .Distinct()
-                .ToListAsync(ct);
-            if (alreadySettled.Count > 0)
-            {
-                throw new ConflictException("One or more expenses are already associated with a settlement");
-            }
-
-            foreach (var expenseId in normalizedExpenseIds)
-            {
-                _db.SettlementExpenses.Add(new SettlementExpenseEntity
-                {
-                    Id = Guid.NewGuid(),
-                    SettlementId = settlement.Id,
-                    ExpenseId = expenseId,
-                });
-            }
+                Id = Guid.NewGuid(),
+                SettlementId = settlement.Id,
+                ExpenseId = expense.Id,
+            });
         }
 
         try
@@ -382,7 +375,7 @@ public class SettlementService
                 .ToListAsync(ct);
 
             var recipientEmails = await _db.Users
-                .Where(u => memberUserIds.Contains(u.Id) && u.Id != actorUserId && !string.IsNullOrWhiteSpace(u.Email))
+                .Where(u => memberUserIds.Contains(u.Id) && !string.IsNullOrWhiteSpace(u.Email))
                 .Select(u => u.Email)
                 .ToListAsync(ct);
 
