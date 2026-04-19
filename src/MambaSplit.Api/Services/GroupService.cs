@@ -92,7 +92,6 @@ public class GroupService
             .ToListAsync(ct);
         var recentGroupExpenses = allGroupExpenses
             .OrderByDescending(e => e.CreatedAt)
-            .Take(50)
             .ToList();
         var allExpenseIds = allGroupExpenses.Select(e => e.Id).ToList();
         var settlementExpenseLinks = allExpenseIds.Count == 0
@@ -114,7 +113,6 @@ public class GroupService
             .ToListAsync(ct);
         var recentGroupSettlements = allGroupSettlements
             .OrderByDescending(s => s.CreatedAt)
-            .Take(50)
             .ToList();
 
         var splitRows = allExpenseIds.Count == 0

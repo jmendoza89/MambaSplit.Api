@@ -636,7 +636,7 @@ public class FlowIntegrationTests
         Assert.Equal(5100L, detailsA["summary"]?["totalExpenseAmountCents"]?.GetValue<long>());
         Assert.Equal(2550L, detailsA["me"]?["netBalanceCents"]?.GetValue<long>());
         Assert.Equal(-2550L, detailsB["me"]?["netBalanceCents"]?.GetValue<long>());
-        Assert.Equal(50, detailsA["expenses"]?.AsArray().Count);
+        Assert.Equal(51, detailsA["expenses"]?.AsArray().Count);
     }
 
     [Fact]

@@ -5,6 +5,7 @@
     }
   ],
   "settings": {
-    "window.title": "${rootName}"
+    "window.title": "${rootName}",
+    "workbench.colorTheme": "Abyss"
   }
 }
