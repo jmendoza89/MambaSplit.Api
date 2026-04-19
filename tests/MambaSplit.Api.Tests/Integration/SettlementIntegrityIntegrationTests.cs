@@ -73,7 +73,6 @@ public class SettlementIntegrityIntegrationTests
             fromUserId = userIdB,
             toUserId = userIdA,
             amountCents = 2500L,
-            expenseIds = new[] { expenseId },
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessB);
@@ -141,7 +140,6 @@ public class SettlementIntegrityIntegrationTests
             fromUserId = userIdB,
             toUserId = userIdA,
             amountCents = 3000L,
-            expenseIds = new[] { expenseId },
             note = "Paid back for dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessB);
@@ -193,7 +191,6 @@ public class SettlementIntegrityIntegrationTests
             fromUserId = userIdB,
             toUserId = userIdA,
             amountCents = 4999L,
-            expenseIds = new[] { expenseId },
             note = "mismatch",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessB);
@@ -203,7 +200,7 @@ public class SettlementIntegrityIntegrationTests
     }
 
     [Fact]
-    public async Task CreateSettlement_WithoutExpenseIds_ReturnsValidationFailed()
+    public async Task CreateSettlement_NoOutstandingBalance_ReturnsValidationFailed()
     {
         using var factory = new CustomWebApplicationFactory();
         using var client = factory.CreateClient();
@@ -212,33 +209,23 @@ public class SettlementIntegrityIntegrationTests
         var (accessA, _, userIdA, _) = await Signup(client, "User A", "password123");
         var (accessB, _, userIdB, emailB) = await Signup(client, "User B", "password123");
 
-        var groupId = await CreateGroup(client, accessA, "Cash Settlement Group");
+        var groupId = await CreateGroup(client, accessA, "No Balance Group");
         var inviteToken = await Invite(client, groupId, accessA, emailB);
         var accept = await PostJson(client, "/api/v1/invites/accept", new { token = inviteToken }, accessB);
         Assert.Equal(HttpStatusCode.OK, accept.StatusCode);
 
-        var createExpense = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
-        {
-            description = "Dinner",
-            payerUserId = userIdA,
-            amountCents = 5000L,
-            participants = new[] { userIdA, userIdB },
-        }, accessA);
-        Assert.Equal(HttpStatusCode.OK, createExpense.StatusCode);
-
+        // No expenses created — pair has no outstanding balance.
         var createSettlement = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new
         {
             fromUserId = userIdB,
             toUserId = userIdA,
-            amountCents = 2500L,
-            expenseIds = Array.Empty<string>(),
-            note = "cash settle partial",
+            amountCents = 1000L,
+            note = "no balance",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessB);
         Assert.Equal(HttpStatusCode.BadRequest, createSettlement.StatusCode);
         var payload = await ReadJsonObject(createSettlement);
         Assert.Equal("VALIDATION_FAILED", payload["code"]?.GetValue<string>());
-        Assert.Contains("ExpenseIds", payload["message"]?.GetValue<string>() ?? string.Empty);
     }
 
     [Fact]
@@ -271,7 +258,6 @@ public class SettlementIntegrityIntegrationTests
             fromUserId = userIdB,
             toUserId = userIdA,
             amountCents = 2500L,
-            expenseIds = new[] { expenseId },
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessB);
@@ -322,7 +308,6 @@ public class SettlementIntegrityIntegrationTests
             fromUserId = userIdB,
             toUserId = userIdA,
             amountCents = 2500L,
-            expenseIds = new[] { expenseId },
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessA);
@@ -367,6 +352,133 @@ public class SettlementIntegrityIntegrationTests
 
         var delete = await Delete(client, $"/api/v1/groups/{groupId}/expenses/{expenseId}", accessA);
         Assert.Equal(HttpStatusCode.NoContent, delete.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateSettlement_FourPersonGroup_DoesNotCrossContaminateOtherPairExpenses()
+    {
+        // Regression test for Bug 4: backend must only link pair-relevant expenses.
+        // Alex/Blair settle first. Carol/Dave must still be able to settle afterward.
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (aAccess, _, aId, _) = await Signup(client, "Alex", "password123");
+        var (bAccess, _, bId, bEmail) = await Signup(client, "Blair", "password123");
+        var (cAccess, _, cId, cEmail) = await Signup(client, "Carol", "password123");
+        var (dAccess, _, dId, dEmail) = await Signup(client, "Dave", "password123");
+
+        var gId = await CreateGroup(client, aAccess, "4P Group");
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = await Invite(client, gId, aAccess, bEmail) }, bAccess)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = await Invite(client, gId, aAccess, cEmail) }, cAccess)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = await Invite(client, gId, aAccess, dEmail) }, dAccess)).StatusCode);
+
+        // Alex pays $10 000; Blair/Carol/Dave each owe $2 500.
+        var expAlex = await PostJson(client, $"/api/v1/groups/{gId}/expenses/equal", new
+        {
+            description = "Alex pays",
+            payerUserId = aId,
+            amountCents = 10000L,
+            participants = new[] { aId, bId, cId, dId },
+        }, aAccess);
+        Assert.Equal(HttpStatusCode.OK, expAlex.StatusCode);
+
+        // Carol pays $6 000; Dave owes $3 000.
+        var expCarol = await PostJson(client, $"/api/v1/groups/{gId}/expenses/equal", new
+        {
+            description = "Carol pays",
+            payerUserId = cId,
+            amountCents = 6000L,
+            participants = new[] { cId, dId },
+        }, cAccess);
+        Assert.Equal(HttpStatusCode.OK, expCarol.StatusCode);
+        var carolExpenseId = (await ReadJsonObject(expCarol))["expenseId"]!.GetValue<string>();
+
+        // Blair settles with Alex (Blair owes Alex $2 500).
+        var blairSettle = await PostJson(client, $"/api/v1/groups/{gId}/settlements", new
+        {
+            fromUserId = bId,
+            toUserId = aId,
+            amountCents = 2500L,
+            note = "Blair pays Alex",
+            settledAt = DateTimeOffset.UtcNow.ToString("O"),
+        }, bAccess);
+        Assert.Equal(HttpStatusCode.Created, blairSettle.StatusCode);
+        var blairSettlementId = (await ReadJsonObject(blairSettle))["settlementId"]!.GetValue<string>();
+
+        // Verify Carol/Dave's expense is NOT linked to Blair's settlement.
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var linkedToBlairSettlement = await db.SettlementExpenses
+                .AsNoTracking()
+                .Where(se => se.SettlementId == Guid.Parse(blairSettlementId))
+                .Select(se => se.ExpenseId.ToString())
+                .ToListAsync();
+            Assert.DoesNotContain(carolExpenseId, linkedToBlairSettlement);
+        }
+
+        // Dave can now settle with Carol without CONFLICT (Bug 4 would have locked carolExpenseId).
+        var daveSettle = await PostJson(client, $"/api/v1/groups/{gId}/settlements", new
+        {
+            fromUserId = dId,
+            toUserId = cId,
+            amountCents = 3000L,
+            note = "Dave pays Carol",
+            settledAt = DateTimeOffset.UtcNow.ToString("O"),
+        }, dAccess);
+        Assert.Equal(HttpStatusCode.Created, daveSettle.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateSettlement_ManyExpenses_AutoSelectsAllAndSucceeds()
+    {
+        // Regression: backend must auto-select ALL unsettled pair expenses, not just
+        // a capped subset (e.g. the 50-expense window the old client used).
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, userIdA, _) = await Signup(client, "User A", "password123");
+        var (accessB, _, userIdB, emailB) = await Signup(client, "User B", "password123");
+
+        var groupId = await CreateGroup(client, accessA, "Many Expenses Group");
+        var inviteToken = await Invite(client, groupId, accessA, emailB);
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = inviteToken }, accessB)).StatusCode);
+
+        // Create 55 expenses so the old 50-expense client window would miss 5.
+        long totalOwedCents = 0;
+        for (var i = 0; i < 55; i++)
+        {
+            var exp = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
+            {
+                description = $"Expense {i + 1}",
+                payerUserId = userIdA,
+                amountCents = 1000L,
+                participants = new[] { userIdA, userIdB },
+            }, accessA);
+            Assert.Equal(HttpStatusCode.OK, exp.StatusCode);
+            totalOwedCents += 500L; // userB owes half
+        }
+
+        // Backend auto-selects all 55 expenses; amount = 55 * 500 = 27 500.
+        var settle = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new
+        {
+            fromUserId = userIdB,
+            toUserId = userIdA,
+            amountCents = totalOwedCents,
+            note = "settle all",
+            settledAt = DateTimeOffset.UtcNow.ToString("O"),
+        }, accessB);
+        Assert.Equal(HttpStatusCode.Created, settle.StatusCode);
+
+        var settlementId = (await ReadJsonObject(settle))["settlementId"]!.GetValue<string>();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var linkedCount = await db.SettlementExpenses
+            .AsNoTracking()
+            .CountAsync(se => se.SettlementId == Guid.Parse(settlementId));
+        Assert.Equal(55, linkedCount);
     }
 
     private sealed class SettlementEmailTestFactory : WebApplicationFactory<Program>

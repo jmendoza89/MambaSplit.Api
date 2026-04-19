@@ -1,4 +1,11 @@
-﻿Use when: you need a standardized, policy-compliant git artifact (branch name, commit message, PR title/body) or a risk-first review of a PR/diff.
+﻿---
+name: git-actions
+description: "Workspace prompt for generating and reviewing all git branch/commit/PR actions. Uses the `risk-first-pr-reviewer` agent to prioritize risk and correctness."
+agent: feature-workflow-manager
+model: GPT-4.1 (copilot)
+---
+
+Use when: you need a standardized, policy-compliant git artifact (branch name, commit message, PR title/body) or a risk-first review of a PR/diff.
 
 Guidelines:
 - Apply the workspace branch naming guardrails:
@@ -26,10 +33,8 @@ Prompts / Examples:
 
 - Risk-first PR review:
   - Input: `action: review_detailed`, `context: { pr_link or diff }`
-  - Output: prioritized findings (Critical -> High -> Medium -> Low), clear reproduction or code pointers, suggested fixes, and whether the PR should be merged to `develop` or requires changes.
+  - Output: prioritized findings (Critical → High → Medium → Low), clear reproduction or code pointers, suggested fixes, and whether the PR should be merged to `develop` or requires changes.
 
 Notes and enforcement:
 - When generating branch/commit/PR artifacts, validate and correct names to match the guardrails. If an input cannot be transformed to a compliant value, return a short explanation and a suggested compliant alternative.
 - Keep outputs concise and machine-friendly where possible (one-line branch name, JSON-like metadata for automation).
-
-This prompt uses a hybrid mapping by default: `gpt-5-mini` for routine artifacts and `gpt-4.1` for `review_*` actions. If you would like to change the default model or mapping, tell me and I will update the prompt.
