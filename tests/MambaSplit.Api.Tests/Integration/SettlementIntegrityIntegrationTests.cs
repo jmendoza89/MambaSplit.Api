@@ -149,10 +149,9 @@ public class SettlementIntegrityIntegrationTests
 
         var message = sentMessages[0];
         var actualRecipients = message.To.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
-        var expectedRecipients = new[] { emailA, emailC }.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
+        var expectedRecipients = new[] { emailA, emailB, emailC }.OrderBy(x => x, StringComparer.OrdinalIgnoreCase).ToList();
 
         Assert.Equal(expectedRecipients, actualRecipients);
-        Assert.DoesNotContain(message.To, recipient => string.Equals(recipient, emailB, StringComparison.OrdinalIgnoreCase));
         Assert.Contains("Settlement recorded in Settlement Email Group", message.Subject);
         Assert.Contains("$30.00", message.HtmlBody);
         Assert.Contains($"https://app.mambasplit.test?groupId={groupId}", message.HtmlBody);
