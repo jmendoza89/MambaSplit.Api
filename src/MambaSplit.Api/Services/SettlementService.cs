@@ -375,7 +375,7 @@ public class SettlementService
                 .ToListAsync(ct);
 
             var recipientEmails = await _db.Users
-                .Where(u => memberUserIds.Contains(u.Id) && u.Id != actorUserId && !string.IsNullOrWhiteSpace(u.Email))
+                .Where(u => memberUserIds.Contains(u.Id) && !string.IsNullOrWhiteSpace(u.Email))
                 .Select(u => u.Email)
                 .ToListAsync(ct);
 
