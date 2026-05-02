@@ -2,7 +2,9 @@
     [switch]$NoRestore,
     [switch]$SkipDocker,
     [switch]$Background,
+    [switch]$NoLaunchBrowser,
     [string]$ApiUrl = "http://localhost:8080",
+    [string]$LaunchPath = "swagger",
     [string]$LogPrefix = "api-local"
 )
 
@@ -17,6 +19,52 @@ function Require-Command {
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         Write-Error "$Name is not installed or not on PATH."
     }
+}
+
+function Get-LaunchUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BaseUrl,
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $BaseUrl
+    }
+
+    if ($Path -match "^https?://") {
+        return $Path
+    }
+
+    return "$($BaseUrl.TrimEnd('/'))/$($Path.TrimStart('/'))"
+}
+
+function Start-BrowserWhenReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    if ($NoLaunchBrowser) {
+        return
+    }
+
+    Write-Host "Swagger will open at $Url when the API is ready..."
+    Start-Job -Name "MambaSplitApiSwaggerLauncher" -ScriptBlock {
+        param([string]$ReadyUrl)
+
+        for ($attempt = 1; $attempt -le 60; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $ReadyUrl -UseBasicParsing -TimeoutSec 2 | Out-Null
+                Start-Process $ReadyUrl
+                return
+            }
+            catch {
+                Start-Sleep -Seconds 1
+            }
+        }
+    } -ArgumentList $Url | Out-Null
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -95,7 +143,11 @@ if ($NoRestore) {
     $dotnetArgs += "--no-restore"
 }
 
+$launchUrl = Get-LaunchUrl -BaseUrl $ApiUrl -Path $LaunchPath
+
 Write-Host "Starting API with local profile on $ApiUrl..."
+Start-BrowserWhenReady -Url $launchUrl
+
 if ($Background) {
     $logsDir = Join-Path $repoRoot "logs"
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
@@ -116,6 +168,7 @@ if ($Background) {
     Write-Host "PID: $($proc.Id)"
     Write-Host "stdout: $outLog"
     Write-Host "stderr: $errLog"
+    Write-Host "Swagger: $launchUrl"
     exit 0
 }
 
