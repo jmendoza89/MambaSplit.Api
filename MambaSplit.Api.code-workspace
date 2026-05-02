@@ -6,6 +6,6 @@
   ],
   "settings": {
     "window.title": "${rootName}",
-    "workbench.colorTheme": "Abyss"
+    "workbench.colorTheme": "GitHub Dark High Contrast"
   }
 }

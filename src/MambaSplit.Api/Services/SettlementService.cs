@@ -68,11 +68,15 @@ public class SettlementService
         // Auto-select all unsettled expenses that are pair-relevant:
         // expenses paid by toUserId where fromUserId has a split (fromUser owes toUser),
         // and expenses paid by fromUserId where toUserId has a split (netted off in the opposite direction).
-        var alreadyLinkedList = await _db.SettlementExpenses
+        var groupExpenseIds = _db.Expenses
+            .Where(e => e.GroupId == groupId)
+            .Select(e => e.Id);
+        var alreadyLinkedExpenseIds = (await _db.SettlementExpenses
+            .Where(se => groupExpenseIds.Contains(se.ExpenseId))
             .Select(se => se.ExpenseId)
             .Distinct()
-            .ToListAsync(ct);
-        var alreadyLinkedExpenseIds = alreadyLinkedList.ToHashSet();
+            .ToListAsync(ct))
+            .ToHashSet();
 
         var candidateExpenses = await _db.Expenses
             .Where(e => e.GroupId == groupId

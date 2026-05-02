@@ -283,6 +283,14 @@ public class FriendService
                     || (s.FromUserId == userB && s.ToUserId == userA)))
             .ToListAsync(ct);
 
+        var expensesByGroup = expenses
+            .GroupBy(e => e.GroupId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var settlementsByGroup = settlements
+            .GroupBy(s => s.GroupId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<SharedGroupBalance>();
         long totalNet = 0;
 
@@ -291,7 +299,7 @@ public class FriendService
             long groupBalance = 0;
 
             // Expenses: for each expense in this group, compute the net between userA and userB.
-            var groupExpenses = expenses.Where(e => e.GroupId == groupId).ToList();
+            var groupExpenses = expensesByGroup.GetValueOrDefault(groupId, []);
             foreach (var expense in groupExpenses)
             {
                 var expenseSplits = splitsByExpense.GetValueOrDefault(expense.Id, new List<ExpenseSplitEntity>());
@@ -318,7 +326,7 @@ public class FriendService
             }
 
             // Settlements between users in this group
-            var groupSettlements = settlements.Where(s => s.GroupId == groupId).ToList();
+            var groupSettlements = settlementsByGroup.GetValueOrDefault(groupId, []);
             foreach (var settlement in groupSettlements)
             {
                 if (settlement.FromUserId == userA && settlement.ToUserId == userB)
