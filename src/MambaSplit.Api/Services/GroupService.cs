@@ -87,61 +87,118 @@ public class GroupService
             .Where(u => memberUserIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
-        var allGroupExpenses = await _db.Expenses
+        const int PageSize = 50;
+
+        // Balance projections: load full history with minimal columns — no tracked entities needed.
+        var allExpenseProjections = await _db.Expenses
+            .AsNoTracking()
             .Where(e => e.GroupId == groupId)
+            .Select(e => new { e.Id, e.PayerUserId, e.AmountCents, e.CreatedAt })
             .ToListAsync(ct);
-        var recentGroupExpenses = allGroupExpenses
-            .OrderByDescending(e => e.CreatedAt)
-            .ToList();
-        var allExpenseIds = allGroupExpenses.Select(e => e.Id).ToList();
-        var settlementExpenseLinks = allExpenseIds.Count == 0
-            ? new List<SettlementExpenseEntity>()
-            : await _db.SettlementExpenses
-                .Where(se => allExpenseIds.Contains(se.ExpenseId))
+
+        var totalExpenseCount = allExpenseProjections.Count;
+        var allExpenseIds = allExpenseProjections.Select(e => e.Id).ToList();
+
+        var allSplitProjections = allExpenseIds.Count == 0
+            ? []
+            : await _db.ExpenseSplits
+                .AsNoTracking()
+                .Where(s => allExpenseIds.Contains(s.ExpenseId))
+                .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
                 .ToListAsync(ct);
+
+        var allSettlementProjections = await _db.Settlements
+            .AsNoTracking()
+            .Where(s => s.GroupId == groupId)
+            .Select(s => new { s.Id, s.GroupId, s.FromUserId, s.ToUserId, s.AmountCents, s.Note, s.CreatedAt })
+            .ToListAsync(ct);
+
+        var totalSettlementCount = allSettlementProjections.Count;
+
+        // Page data: top 50 most recent expense IDs derived client-side from the already-loaded
+        // projection (avoids DateTimeOffset ORDER BY which SQLite does not support).
+        var pageExpenseIds = allExpenseProjections
+            .OrderByDescending(e => e.CreatedAt)
+            .Take(PageSize)
+            .Select(e => e.Id)
+            .ToList();
+
+        var hasMoreExpenses = totalExpenseCount > PageSize;
+        var hasMoreSettlements = totalSettlementCount > PageSize;
+
+        // Load full expense entities for the page (no ORDER BY — just a keyed lookup).
+        var pageExpensesUnordered = pageExpenseIds.Count == 0
+            ? []
+            : await _db.Expenses
+                .AsNoTracking()
+                .Where(e => pageExpenseIds.Contains(e.Id))
+                .ToListAsync(ct);
+
+        // Re-apply newest-first order for display.
+        var pageExpenseById = pageExpensesUnordered.ToDictionary(e => e.Id);
+        var pageExpenses = pageExpenseIds.Select(id => pageExpenseById[id]).ToList();
+
+        // Settlement-expense links scoped to the page only (to populate settlementId per expense).
+        var settlementExpenseLinks = pageExpenseIds.Count == 0
+            ? []
+            : await _db.SettlementExpenses
+                .AsNoTracking()
+                .Where(se => pageExpenseIds.Contains(se.ExpenseId))
+                .Select(se => new { se.ExpenseId, se.SettlementId })
+                .ToListAsync(ct);
+
         var settlementIdByExpenseId = settlementExpenseLinks
             .GroupBy(se => se.ExpenseId)
             .ToDictionary(
                 g => g.Key,
                 g => g.OrderBy(x => x.SettlementId).Select(x => x.SettlementId).First());
-        var expenseIdsBySettlementId = settlementExpenseLinks
-            .GroupBy(se => se.SettlementId)
-            .ToDictionary(g => g.Key, g => g.Select(x => x.ExpenseId).ToList());
 
-        var allGroupSettlements = await _db.Settlements
-            .Where(s => s.GroupId == groupId)
-            .ToListAsync(ct);
-        var recentGroupSettlements = allGroupSettlements
+        // Splits scoped to page expenses for display.
+        var pageSplitRows = pageExpenseIds.Count == 0
+            ? []
+            : await _db.ExpenseSplits
+                .AsNoTracking()
+                .Where(s => pageExpenseIds.Contains(s.ExpenseId))
+                .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
+                .ToListAsync(ct);
+
+        var splitsByExpense = pageSplitRows
+            .GroupBy(s => s.ExpenseId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Top-50 settlements for display (sorted from the already-loaded projections).
+        var pageSettlements = allSettlementProjections
             .OrderByDescending(s => s.CreatedAt)
+            .Take(PageSize)
             .ToList();
 
-        var splitRows = allExpenseIds.Count == 0
-            ? new List<ExpenseSplitEntity>()
-            : await _db.ExpenseSplits.Where(s => allExpenseIds.Contains(s.ExpenseId)).ToListAsync(ct);
-        var splitsByExpense = splitRows.GroupBy(s => s.ExpenseId).ToDictionary(g => g.Key, g => g.ToList());
+        // Balance calculation over full history using projections.
+        var splitsByExpenseForBalance = allSplitProjections
+            .GroupBy(s => s.ExpenseId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         var netByUserId = memberUserIds.ToDictionary(id => id, _ => 0L);
 
         // Ensure all users referenced in historical data have an entry so that
         // departed members (whose splits in settled or reversed expenses were not
         // rebalanced) do not cause KeyNotFoundException.
-        foreach (var expense in allGroupExpenses)
+        foreach (var expense in allExpenseProjections)
             netByUserId.TryAdd(expense.PayerUserId, 0L);
-        foreach (var split in splitRows)
+        foreach (var split in allSplitProjections)
             netByUserId.TryAdd(split.UserId, 0L);
-        foreach (var settlement in allGroupSettlements)
+        foreach (var settlement in allSettlementProjections)
         {
             netByUserId.TryAdd(settlement.FromUserId, 0L);
             netByUserId.TryAdd(settlement.ToUserId, 0L);
         }
 
-        foreach (var expense in allGroupExpenses)
+        foreach (var expense in allExpenseProjections)
         {
             netByUserId[expense.PayerUserId] = CheckedAdd(
                 netByUserId[expense.PayerUserId],
                 expense.AmountCents,
                 "net balance for payer");
-            if (splitsByExpense.TryGetValue(expense.Id, out var expenseSplits))
+            if (splitsByExpenseForBalance.TryGetValue(expense.Id, out var expenseSplits))
             {
                 foreach (var split in expenseSplits)
                 {
@@ -153,7 +210,7 @@ public class GroupService
             }
         }
 
-        foreach (var settlement in allGroupSettlements)
+        foreach (var settlement in allSettlementProjections)
         {
             netByUserId[settlement.FromUserId] = CheckedAdd(
                 netByUserId[settlement.FromUserId],
@@ -184,9 +241,9 @@ public class GroupService
             })
             .ToList();
 
-        var expenseInfos = recentGroupExpenses.Select(expense =>
+        var expenseInfos = pageExpenses.Select(expense =>
         {
-            var mappedSplits = splitsByExpense.GetValueOrDefault(expense.Id, new List<ExpenseSplitEntity>())
+            var mappedSplits = splitsByExpense.GetValueOrDefault(expense.Id, [])
                 .OrderBy(s => s.UserId.ToString())
                 .Select(s => new ExpenseSplitInfo(s.UserId, s.AmountOwedCents))
                 .ToList();
@@ -204,7 +261,7 @@ public class GroupService
                 mappedSplits);
         }).ToList();
 
-        var settlementInfos = recentGroupSettlements.Select(settlement =>
+        var settlementInfos = pageSettlements.Select(settlement =>
         {
             if (!usersById.TryGetValue(settlement.FromUserId, out var fromUser))
             {
@@ -226,13 +283,13 @@ public class GroupService
                 settlement.AmountCents,
                 settlement.Note,
                 settlement.CreatedAt,
-                expenseIdsBySettlementId.GetValueOrDefault(settlement.Id, []));
+                []); // expenseIds omitted from initial load; use settlement detail endpoint
         }).ToList();
 
         var settlementSuggestions = BuildSettlementSuggestions(memberInfos);
-        var totalExpenseAmountCents = CheckedSum(allGroupExpenses.Select(e => e.AmountCents), "total expense amount");
+        var totalExpenseAmountCents = CheckedSum(allExpenseProjections.Select(e => e.AmountCents), "total expense amount");
         var totalSettlementAmountCents = CheckedSum(
-            allGroupSettlements.Select(s => s.AmountCents),
+            allSettlementProjections.Select(s => s.AmountCents),
             "total settlement amount");
         return new GroupDetails(
             new GroupInfo(group.Id, group.Name, group.CreatedBy, group.CreatedAt),
@@ -241,7 +298,9 @@ public class GroupService
             expenseInfos,
             settlementInfos,
             settlementSuggestions,
-            new Summary(allGroupExpenses.Count, totalExpenseAmountCents, allGroupSettlements.Count, totalSettlementAmountCents));
+            new Summary(totalExpenseCount, totalExpenseAmountCents, totalSettlementCount, totalSettlementAmountCents),
+            hasMoreExpenses,
+            hasMoreSettlements);
     }
 
     public async Task DeleteGroupAsync(Guid groupId, Guid actorUserId, CancellationToken ct = default)
@@ -918,7 +977,9 @@ public class GroupService
         List<ExpenseInfo> Expenses,
         List<SettlementInfo> Settlements,
         List<SettlementSuggestion> SettlementSuggestions,
-        Summary Summary);
+        Summary Summary,
+        bool HasMoreExpenses,
+        bool HasMoreSettlements);
     public record GroupInfo(Guid Id, string Name, Guid CreatedBy, DateTimeOffset CreatedAt);
     public record MeInfo(Guid UserId, Role Role, long NetBalanceCents);
     public record MemberInfo(Guid UserId, string DisplayName, string Email, Role Role, DateTimeOffset JoinedAt, long NetBalanceCents);

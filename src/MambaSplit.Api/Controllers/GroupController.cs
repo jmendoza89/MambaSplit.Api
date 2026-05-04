@@ -157,7 +157,9 @@ public record GroupDetailsDto(
     List<ExpenseInfoDto> Expenses,
     List<SettlementInfoDto> Settlements,
     List<SettlementSuggestionDto> SettlementSuggestions,
-    SummaryDto Summary)
+    SummaryDto Summary,
+    bool HasMoreExpenses,
+    bool HasMoreSettlements)
 {
     public static GroupDetailsDto From(GroupService.GroupDetails details) => new(
         GroupInfoDto.From(details.Group),
@@ -166,7 +168,9 @@ public record GroupDetailsDto(
         details.Expenses.Select(ExpenseInfoDto.From).ToList(),
         details.Settlements.Select(SettlementInfoDto.From).ToList(),
         details.SettlementSuggestions.Select(SettlementSuggestionDto.From).ToList(),
-        SummaryDto.From(details.Summary));
+        SummaryDto.From(details.Summary),
+        details.HasMoreExpenses,
+        details.HasMoreSettlements);
 }
 
 public record GroupInfoDto(string Id, string Name, string CreatedBy, string CreatedAt)
