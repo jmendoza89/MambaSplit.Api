@@ -47,6 +47,5 @@ jobs:
           ASPNETCORE_ENVIRONMENT: Test
           APP__SECURITY__JWT__SECRET: ${{ vars.TEST_JWT_SECRET }}
           CONNECTIONSTRINGS__DEFAULT: ${{ vars.TEST_CONNECTION_STRING }}
-          MAMBASPLIT_TEST_DB_PROVIDER: postgres
           MAMBASPLIT_TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=mambasplit_test;Username=mambasplit;Password=mambasplit
         run: dotnet test MambaSplit.Api.sln --configuration Release --no-build --nologo

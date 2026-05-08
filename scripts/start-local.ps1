@@ -67,6 +67,26 @@ function Start-BrowserWhenReady {
     } -ArgumentList $Url | Out-Null
 }
 
+function Ensure-PostgresDatabase {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DatabaseName
+    )
+
+    $exists = docker exec mambasplit_db psql -U mambasplit -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DatabaseName'"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Unable to check for Postgres database '$DatabaseName'."
+    }
+
+    if ($exists -ne "1") {
+        Write-Host "Creating Postgres database $DatabaseName..."
+        docker exec mambasplit_db psql -U mambasplit -d postgres -c "CREATE DATABASE $DatabaseName" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Unable to create Postgres database '$DatabaseName'."
+        }
+    }
+}
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 $apiProjectPath = Join-Path $repoRoot "src\\MambaSplit.Api\\MambaSplit.Api.csproj"
@@ -114,6 +134,8 @@ if (-not $SkipDocker) {
         Write-Host "Starting Postgres container (docker compose up -d db)..."
         docker compose up -d db
     }
+
+    Ensure-PostgresDatabase -DatabaseName "mambasplit_test"
 }
 
 try {
@@ -134,6 +156,7 @@ if ($portInUse) {
 
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 $env:ASPNETCORE_URLS = $ApiUrl
+$env:MAMBASPLIT_TEST_POSTGRES_CONNECTION = "Host=localhost;Port=5432;Database=mambasplit_test;Username=mambasplit;Password=mambasplit"
 
 # Avoid Event Log permission issues in restricted shells.
 $env:Logging__EventLog__LogLevel__Default = "None"
