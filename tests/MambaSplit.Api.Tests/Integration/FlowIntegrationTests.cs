@@ -636,8 +636,8 @@ public class FlowIntegrationTests
         Assert.Equal(5100L, detailsA["summary"]?["totalExpenseAmountCents"]?.GetValue<long>());
         Assert.Equal(2550L, detailsA["me"]?["netBalanceCents"]?.GetValue<long>());
         Assert.Equal(-2550L, detailsB["me"]?["netBalanceCents"]?.GetValue<long>());
-        // Pagination: initial load returns at most 50 expenses; hasMoreExpenses signals remaining pages.
-        Assert.Equal(50, detailsA["expenses"]?.AsArray().Count);
+        // Pagination: initial load returns at most 25 expenses; hasMoreExpenses signals remaining pages.
+        Assert.Equal(25, detailsA["expenses"]?.AsArray().Count);
         Assert.True(detailsA["hasMoreExpenses"]?.GetValue<bool>());
         Assert.False(detailsA["hasMoreSettlements"]?.GetValue<bool>());
     }

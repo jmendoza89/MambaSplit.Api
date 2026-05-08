@@ -12,6 +12,21 @@ permissions:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: mambasplit_test
+          POSTGRES_USER: mambasplit
+          POSTGRES_PASSWORD: mambasplit
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mambasplit -d mambasplit_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,4 +47,6 @@ jobs:
           ASPNETCORE_ENVIRONMENT: Test
           APP__SECURITY__JWT__SECRET: ${{ vars.TEST_JWT_SECRET }}
           CONNECTIONSTRINGS__DEFAULT: ${{ vars.TEST_CONNECTION_STRING }}
+          MAMBASPLIT_TEST_DB_PROVIDER: postgres
+          MAMBASPLIT_TEST_POSTGRES_CONNECTION: Host=localhost;Port=5432;Database=mambasplit_test;Username=mambasplit;Password=mambasplit
         run: dotnet test MambaSplit.Api.sln --configuration Release --no-build --nologo
