@@ -1,6 +1,7 @@
 ﻿param(
     [switch]$NoRestore,
     [switch]$SkipDocker,
+    [switch]$WithTestDatabase,
     [switch]$Background,
     [switch]$NoLaunchBrowser,
     [string]$ApiUrl = "http://localhost:8080",
@@ -135,7 +136,9 @@ if (-not $SkipDocker) {
         docker compose up -d db
     }
 
-    Ensure-PostgresDatabase -DatabaseName "mambasplit_test"
+    if ($WithTestDatabase) {
+        Ensure-PostgresDatabase -DatabaseName "mambasplit_test"
+    }
 }
 
 try {
@@ -156,7 +159,9 @@ if ($portInUse) {
 
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 $env:ASPNETCORE_URLS = $ApiUrl
-$env:MAMBASPLIT_TEST_POSTGRES_CONNECTION = "Host=localhost;Port=5432;Database=mambasplit_test;Username=mambasplit;Password=mambasplit"
+if ($WithTestDatabase) {
+    $env:MAMBASPLIT_TEST_POSTGRES_CONNECTION = "Host=localhost;Port=5432;Database=mambasplit_test;Username=mambasplit;Password=mambasplit"
+}
 
 # Avoid Event Log permission issues in restricted shells.
 $env:Logging__EventLog__LogLevel__Default = "None"
