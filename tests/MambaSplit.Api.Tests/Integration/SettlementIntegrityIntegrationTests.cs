@@ -278,7 +278,7 @@ public class SettlementIntegrityIntegrationTests
     }
 
     [Fact]
-    public async Task CreateSettlement_ByNonPayerActor_ReturnsForbidden()
+    public async Task CreateSettlement_ByPayeeActor_Succeeds()
     {
         using var factory = new CustomWebApplicationFactory();
         using var client = factory.CreateClient();
@@ -310,6 +310,46 @@ public class SettlementIntegrityIntegrationTests
             note = "settle dinner",
             settledAt = DateTimeOffset.UtcNow.ToString("O"),
         }, accessA);
+
+        Assert.Equal(HttpStatusCode.Created, createSettlement.StatusCode);
+    }
+
+    [Fact]
+    public async Task CreateSettlement_ByUnrelatedGroupMember_ReturnsForbidden()
+    {
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, userIdA, _) = await Signup(client, "User A", "password123");
+        var (accessB, _, userIdB, emailB) = await Signup(client, "User B", "password123");
+        var (accessC, _, _, emailC) = await Signup(client, "User C", "password123");
+
+        var groupId = await CreateGroup(client, accessA, "Settlement Unrelated Actor Group");
+        var inviteTokenB = await Invite(client, groupId, accessA, emailB);
+        var acceptB = await PostJson(client, "/api/v1/invites/accept", new { token = inviteTokenB }, accessB);
+        Assert.Equal(HttpStatusCode.OK, acceptB.StatusCode);
+        var inviteTokenC = await Invite(client, groupId, accessA, emailC);
+        var acceptC = await PostJson(client, "/api/v1/invites/accept", new { token = inviteTokenC }, accessC);
+        Assert.Equal(HttpStatusCode.OK, acceptC.StatusCode);
+
+        var createExpense = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
+        {
+            description = "Dinner",
+            payerUserId = userIdA,
+            amountCents = 5000L,
+            participants = new[] { userIdA, userIdB },
+        }, accessA);
+        Assert.Equal(HttpStatusCode.OK, createExpense.StatusCode);
+
+        var createSettlement = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new
+        {
+            fromUserId = userIdB,
+            toUserId = userIdA,
+            amountCents = 2500L,
+            note = "settle dinner",
+            settledAt = DateTimeOffset.UtcNow.ToString("O"),
+        }, accessC);
 
         Assert.Equal(HttpStatusCode.Forbidden, createSettlement.StatusCode);
         var payload = await ReadJsonObject(createSettlement);

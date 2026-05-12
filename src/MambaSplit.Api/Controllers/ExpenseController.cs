@@ -21,6 +21,23 @@ public class ExpenseController : ControllerBase
         _expenseService = expenseService;
     }
 
+    [HttpGet]
+    public async Task<ActionResult<ListExpensesPageResponse>> List(
+        string groupId,
+        [FromQuery] string? before,
+        [FromQuery] int? limit,
+        CancellationToken ct)
+    {
+        var response = await _groupService.ListExpensesPageAsync(
+            ParseGuid(groupId, "groupId"),
+            User.UserId(),
+            ParseDateTimeOffset(before, "before"),
+            limit,
+            ct);
+
+        return Ok(ListExpensesPageResponse.From(response));
+    }
+
     [HttpPost("equal")]
     public async Task<ActionResult<CreateExpenseResponse>> CreateEqual(
         string groupId,
@@ -89,6 +106,32 @@ public class ExpenseController : ControllerBase
 
         return id;
     }
+
+    private static DateTimeOffset? ParseDateTimeOffset(string? value, string field)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!DateTimeOffset.TryParse(value, out var parsed))
+        {
+            throw new MambaSplit.Api.Exceptions.ValidationException($"{field}: must be a valid ISO-8601 date/time");
+        }
+
+        return parsed;
+    }
+}
+
+public record ListExpensesPageResponse(
+    List<ExpenseInfoDto> Expenses,
+    bool HasMoreExpenses,
+    string? NextBefore)
+{
+    public static ListExpensesPageResponse From(GroupService.ExpensePage page) => new(
+        page.Expenses.Select(ExpenseInfoDto.From).ToList(),
+        page.HasMoreExpenses,
+        page.NextBefore?.ToString("O"));
 }
 
 public record CreateEqualExpenseRequest(

@@ -12,10 +12,12 @@ namespace MambaSplit.Api.Controllers;
 public class SettlementsController : ControllerBase
 {
     private readonly SettlementService _settlementService;
+    private readonly GroupService _groupService;
 
-    public SettlementsController(SettlementService settlementService)
+    public SettlementsController(SettlementService settlementService, GroupService groupService)
     {
         _settlementService = settlementService;
+        _groupService = groupService;
     }
 
     [HttpPost("groups/{groupId}/settlements")]
@@ -47,15 +49,40 @@ public class SettlementsController : ControllerBase
     }
 
     [HttpGet("groups/{groupId}/settlements")]
-    public async Task<ActionResult<ListSettlementsResponse>> ListGroupSettlements(
+    public async Task<ActionResult<ListSettlementRowsResponse>> ListGroupSettlements(
         string groupId,
+        [FromQuery] string? before,
+        [FromQuery] int? limit,
         CancellationToken ct)
     {
         var gid = ParseGuid(groupId, "groupId");
         var userId = User.UserId();
-        var response = await _settlementService.ListGroupSettlementsAsync(gid, userId, ct);
-        return Ok(new ListSettlementsResponse(
-            response.Settlements.Select(SettlementDetailsResponse.From).ToList()));
+        var response = await _groupService.ListSettlementsPageAsync(
+            gid,
+            userId,
+            ParseDateTimeOffset(before, "before"),
+            limit,
+            ct);
+        return Ok(ListSettlementRowsResponse.From(response));
+    }
+
+    [HttpGet("groups/{groupId}/settlements/{settlementId}/expenses")]
+    public async Task<ActionResult<SettlementExpensesPageResponse>> ListSettlementExpenses(
+        string groupId,
+        string settlementId,
+        [FromQuery] string? before,
+        [FromQuery] int? limit,
+        CancellationToken ct)
+    {
+        var response = await _groupService.ListSettlementExpensesPageAsync(
+            ParseGuid(groupId, "groupId"),
+            ParseGuid(settlementId, "settlementId"),
+            User.UserId(),
+            ParseDateTimeOffset(before, "before"),
+            limit,
+            ct);
+
+        return Ok(SettlementExpensesPageResponse.From(response));
     }
 
     [HttpGet("settlements/{settlementId}")]
@@ -142,4 +169,28 @@ public record SettlementDetailsResponse(
             settlement.Note,
             settlement.SettledAt.ToString("O"),
             settlement.ExpenseIds.Select(id => id.ToString()).ToList());
+}
+
+public record ListSettlementRowsResponse(
+    List<SettlementInfoDto> Settlements,
+    bool HasMoreSettlements,
+    string? NextBefore)
+{
+    public static ListSettlementRowsResponse From(GroupService.SettlementPage page) => new(
+        page.Settlements.Select(SettlementInfoDto.From).ToList(),
+        page.HasMoreSettlements,
+        page.NextBefore?.ToString("O"));
+}
+
+public record SettlementExpensesPageResponse(
+    SettlementInfoDto Settlement,
+    List<ExpenseInfoDto> Expenses,
+    bool HasMoreExpenses,
+    string? NextBefore)
+{
+    public static SettlementExpensesPageResponse From(GroupService.SettlementExpensePage page) => new(
+        SettlementInfoDto.From(page.Settlement),
+        page.Expenses.Select(ExpenseInfoDto.From).ToList(),
+        page.HasMoreExpenses,
+        page.NextBefore?.ToString("O"));
 }

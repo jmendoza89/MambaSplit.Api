@@ -237,7 +237,7 @@ public record SettlementInfoDto(
     long AmountCents,
     string? Note,
     string SettledAt,
-    List<string> ExpenseIds)
+    int ExpenseCount)
 {
     public static SettlementInfoDto From(GroupService.SettlementInfo settlement) =>
         new(
@@ -250,7 +250,7 @@ public record SettlementInfoDto(
             settlement.AmountCents,
             settlement.Note,
             settlement.CreatedAt.ToString("O"),
-            settlement.ExpenseIds.Select(id => id.ToString()).ToList());
+            settlement.ExpenseCount);
 }
 
 public record SettlementSuggestionDto(

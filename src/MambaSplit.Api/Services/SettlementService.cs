@@ -55,7 +55,7 @@ public class SettlementService
         await _groupService.RequireMemberAsync(groupId, actorUserId, ct);
         await _groupService.RequireMembersAsync(groupId, new[] { fromUserId, toUserId }, ct);
 
-        EnforceSettlementAuthorPolicy(actorUserId, fromUserId);
+        EnforceSettlementAuthorPolicy(actorUserId, fromUserId, toUserId);
 
         var effectiveSettAtInput = settledAt ?? DateTimeOffset.UtcNow;
         var effectiveSettledAt = effectiveSettAtInput.ToUniversalTime();
@@ -433,9 +433,9 @@ public class SettlementService
         return expenseCount == 1 ? "1 linked expense" : $"{expenseCount} linked expenses";
     }
 
-    private static void EnforceSettlementAuthorPolicy(Guid actorUserId, Guid fromUserId)
+    private static void EnforceSettlementAuthorPolicy(Guid actorUserId, Guid fromUserId, Guid toUserId)
     {
-        if (actorUserId != fromUserId)
+        if (actorUserId != fromUserId && actorUserId != toUserId)
         {
             throw new AuthorizationException("Not authorized to create settlement for another member");
         }

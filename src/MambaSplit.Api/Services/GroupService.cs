@@ -9,6 +9,9 @@ namespace MambaSplit.Api.Services;
 
 public class GroupService
 {
+    public const int ExpensePageSize = 25;
+    public const int SettlementPageSize = 5;
+
     private readonly AppDbContext _db;
     private readonly TransactionalEmailService _transactionalEmailService;
     private readonly ILogger<GroupService> _logger;
@@ -92,8 +95,6 @@ public class GroupService
             .Where(u => memberUserIds.Contains(u.Id))
             .ToDictionaryAsync(u => u.Id, ct);
 
-        const int PageSize = 25;
-
         var totalExpenseCount = await _db.Expenses
             .AsNoTracking()
             .Where(e => e.GroupId == groupId)
@@ -108,11 +109,12 @@ public class GroupService
             .AsNoTracking()
             .Where(e => e.GroupId == groupId)
             .OrderByDescending(e => e.CreatedAt)
-            .Take(PageSize)
+            .ThenByDescending(e => e.Id)
+            .Take(ExpensePageSize)
             .ToListAsync(ct);
 
-        var hasMoreExpenses = totalExpenseCount > PageSize;
-        var hasMoreSettlements = totalSettlementCount > PageSize;
+        var hasMoreExpenses = totalExpenseCount > ExpensePageSize;
+        var hasMoreSettlements = totalSettlementCount > SettlementPageSize;
 
         var pageExpenseIds = pageExpenses.Select(e => e.Id).ToList();
 
@@ -148,9 +150,19 @@ public class GroupService
             .AsNoTracking()
             .Where(s => s.GroupId == groupId)
             .OrderByDescending(s => s.CreatedAt)
-            .Take(PageSize)
+            .ThenByDescending(s => s.Id)
+            .Take(SettlementPageSize)
             .Select(s => new { s.Id, s.GroupId, s.FromUserId, s.ToUserId, s.AmountCents, s.Note, s.CreatedAt })
             .ToListAsync(ct);
+
+        var pageSettlementIds = pageSettlements.Select(s => s.Id).ToList();
+        var expenseCountsBySettlementId = pageSettlementIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await _db.SettlementExpenses
+                .AsNoTracking()
+                .Where(se => pageSettlementIds.Contains(se.SettlementId))
+                .GroupBy(se => se.SettlementId)
+                .ToDictionaryAsync(g => g.Key, g => g.Count(), ct);
 
         var paidByUser = await _db.Expenses
             .AsNoTracking()
@@ -291,7 +303,7 @@ public class GroupService
                 settlement.AmountCents,
                 settlement.Note,
                 settlement.CreatedAt,
-                []); // expenseIds omitted from initial load; use settlement detail endpoint
+                expenseCountsBySettlementId.GetValueOrDefault(settlement.Id, 0));
         }).ToList();
 
         var settlementSuggestions = BuildSettlementSuggestions(memberInfos);
@@ -318,6 +330,129 @@ public class GroupService
                 CheckedToLong(totalSettlementAmountCents, "total settlement amount")),
             hasMoreExpenses,
             hasMoreSettlements);
+    }
+
+    public async Task<ExpensePage> ListExpensesPageAsync(
+        Guid groupId,
+        Guid userId,
+        DateTimeOffset? before,
+        int? limit,
+        CancellationToken ct = default)
+    {
+        await RequireMemberAsync(groupId, userId, ct);
+
+        var pageSize = NormalizeLimit(limit, ExpensePageSize);
+        var query = _db.Expenses
+            .AsNoTracking()
+            .Where(e => e.GroupId == groupId);
+
+        if (before is not null)
+        {
+            var beforeUtc = before.Value.ToUniversalTime();
+            query = query.Where(e => e.CreatedAt < beforeUtc);
+        }
+
+        var pagePlusOne = await query
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Take(pageSize + 1)
+            .ToListAsync(ct);
+
+        var pageExpenses = pagePlusOne.Take(pageSize).ToList();
+        var expenseInfos = await MapExpensesAsync(pageExpenses, ct);
+        var hasMore = pagePlusOne.Count > pageSize;
+        var nextBefore = hasMore && pageExpenses.Count > 0
+            ? pageExpenses[^1].CreatedAt
+            : (DateTimeOffset?)null;
+
+        return new ExpensePage(expenseInfos, hasMore, nextBefore);
+    }
+
+    public async Task<SettlementPage> ListSettlementsPageAsync(
+        Guid groupId,
+        Guid userId,
+        DateTimeOffset? before,
+        int? limit,
+        CancellationToken ct = default)
+    {
+        await RequireMemberAsync(groupId, userId, ct);
+
+        var pageSize = NormalizeLimit(limit, SettlementPageSize);
+        var query = _db.Settlements
+            .AsNoTracking()
+            .Where(s => s.GroupId == groupId);
+
+        if (before is not null)
+        {
+            var beforeUtc = before.Value.ToUniversalTime();
+            query = query.Where(s => s.CreatedAt < beforeUtc);
+        }
+
+        var pagePlusOne = await query
+            .OrderByDescending(s => s.CreatedAt)
+            .ThenByDescending(s => s.Id)
+            .Take(pageSize + 1)
+            .ToListAsync(ct);
+
+        var pageSettlements = pagePlusOne.Take(pageSize).ToList();
+        var settlementInfos = await MapSettlementsAsync(pageSettlements, ct);
+        var hasMore = pagePlusOne.Count > pageSize;
+        var nextBefore = hasMore && pageSettlements.Count > 0
+            ? pageSettlements[^1].CreatedAt
+            : (DateTimeOffset?)null;
+
+        return new SettlementPage(settlementInfos, hasMore, nextBefore);
+    }
+
+    public async Task<SettlementExpensePage> ListSettlementExpensesPageAsync(
+        Guid groupId,
+        Guid settlementId,
+        Guid userId,
+        DateTimeOffset? before,
+        int? limit,
+        CancellationToken ct = default)
+    {
+        await RequireMemberAsync(groupId, userId, ct);
+
+        var settlement = await _db.Settlements
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == settlementId, ct);
+        if (settlement is null || settlement.GroupId != groupId)
+        {
+            throw new ResourceNotFoundException("Settlement", settlementId.ToString());
+        }
+
+        var settlementInfo = (await MapSettlementsAsync([settlement], ct)).Single();
+        var pageSize = NormalizeLimit(limit, ExpensePageSize);
+        var query = _db.SettlementExpenses
+            .AsNoTracking()
+            .Where(se => se.SettlementId == settlementId)
+            .Join(
+                _db.Expenses.AsNoTracking().Where(e => e.GroupId == groupId),
+                se => se.ExpenseId,
+                e => e.Id,
+                (_, e) => e);
+
+        if (before is not null)
+        {
+            var beforeUtc = before.Value.ToUniversalTime();
+            query = query.Where(e => e.CreatedAt < beforeUtc);
+        }
+
+        var pagePlusOne = await query
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Take(pageSize + 1)
+            .ToListAsync(ct);
+
+        var pageExpenses = pagePlusOne.Take(pageSize).ToList();
+        var expenseInfos = await MapExpensesAsync(pageExpenses, ct);
+        var hasMore = pagePlusOne.Count > pageSize;
+        var nextBefore = hasMore && pageExpenses.Count > 0
+            ? pageExpenses[^1].CreatedAt
+            : (DateTimeOffset?)null;
+
+        return new SettlementExpensePage(settlementInfo, expenseInfos, hasMore, nextBefore);
     }
 
     public async Task DeleteGroupAsync(Guid groupId, Guid actorUserId, CancellationToken ct = default)
@@ -912,6 +1047,114 @@ public class GroupService
         return total;
     }
 
+    private async Task<List<ExpenseInfo>> MapExpensesAsync(List<ExpenseEntity> expenses, CancellationToken ct)
+    {
+        var expenseIds = expenses.Select(e => e.Id).ToList();
+        var settlementExpenseLinks = expenseIds.Count == 0
+            ? []
+            : await _db.SettlementExpenses
+                .AsNoTracking()
+                .Where(se => expenseIds.Contains(se.ExpenseId))
+                .Select(se => new { se.ExpenseId, se.SettlementId })
+                .ToListAsync(ct);
+
+        var settlementIdByExpenseId = settlementExpenseLinks
+            .GroupBy(se => se.ExpenseId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(x => x.SettlementId).Select(x => x.SettlementId).First());
+
+        var splitRows = expenseIds.Count == 0
+            ? []
+            : await _db.ExpenseSplits
+                .AsNoTracking()
+                .Where(s => expenseIds.Contains(s.ExpenseId))
+                .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
+                .ToListAsync(ct);
+
+        var splitsByExpense = splitRows
+            .GroupBy(s => s.ExpenseId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        return expenses.Select(expense =>
+        {
+            var mappedSplits = splitsByExpense.GetValueOrDefault(expense.Id, [])
+                .OrderBy(s => s.UserId.ToString())
+                .Select(s => new ExpenseSplitInfo(s.UserId, s.AmountOwedCents))
+                .ToList();
+            var settlementId = settlementIdByExpenseId.TryGetValue(expense.Id, out var sid) ? (Guid?)sid : null;
+
+            return new ExpenseInfo(
+                expense.Id,
+                expense.Description,
+                expense.AmountCents,
+                expense.PayerUserId,
+                expense.CreatedByUserId,
+                expense.ReversalOfExpenseId,
+                expense.CreatedAt,
+                settlementId,
+                mappedSplits);
+        }).ToList();
+    }
+
+    private async Task<List<SettlementInfo>> MapSettlementsAsync(List<SettlementEntity> settlements, CancellationToken ct)
+    {
+        var settlementIds = settlements.Select(s => s.Id).ToList();
+        var expenseCountsBySettlementId = settlementIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await _db.SettlementExpenses
+                .AsNoTracking()
+                .Where(se => settlementIds.Contains(se.SettlementId))
+                .GroupBy(se => se.SettlementId)
+                .ToDictionaryAsync(g => g.Key, g => g.Count(), ct);
+
+        var userIds = settlements
+            .SelectMany(s => new[] { s.FromUserId, s.ToUserId })
+            .Distinct()
+            .ToList();
+        var usersById = userIds.Count == 0
+            ? new Dictionary<Guid, UserEntity>()
+            : await _db.Users
+                .AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .ToDictionaryAsync(u => u.Id, ct);
+
+        return settlements.Select(settlement =>
+        {
+            if (!usersById.TryGetValue(settlement.FromUserId, out var fromUser))
+            {
+                throw new ResourceNotFoundException("User", settlement.FromUserId.ToString());
+            }
+
+            if (!usersById.TryGetValue(settlement.ToUserId, out var toUser))
+            {
+                throw new ResourceNotFoundException("User", settlement.ToUserId.ToString());
+            }
+
+            return new SettlementInfo(
+                settlement.Id,
+                settlement.GroupId,
+                settlement.FromUserId,
+                fromUser.DisplayName,
+                settlement.ToUserId,
+                toUser.DisplayName,
+                settlement.AmountCents,
+                settlement.Note,
+                settlement.CreatedAt,
+                expenseCountsBySettlementId.GetValueOrDefault(settlement.Id, 0));
+        }).ToList();
+    }
+
+    private static int NormalizeLimit(int? requestedLimit, int maxLimit)
+    {
+        if (requestedLimit is null or <= 0)
+        {
+            return maxLimit;
+        }
+
+        return Math.Min(requestedLimit.Value, maxLimit);
+    }
+
     private static List<SettlementSuggestion> BuildSettlementSuggestions(List<MemberInfo> memberInfos)
     {
         var creditors = memberInfos
@@ -1022,6 +1265,7 @@ public class GroupService
         DateTimeOffset CreatedAt,
         Guid? SettlementId,
         List<ExpenseSplitInfo> Splits);
+    public record ExpensePage(List<ExpenseInfo> Expenses, bool HasMoreExpenses, DateTimeOffset? NextBefore);
     public record SettlementInfo(
         Guid Id,
         Guid GroupId,
@@ -1032,7 +1276,9 @@ public class GroupService
         long AmountCents,
         string? Note,
         DateTimeOffset CreatedAt,
-        List<Guid> ExpenseIds);
+        int ExpenseCount);
+    public record SettlementPage(List<SettlementInfo> Settlements, bool HasMoreSettlements, DateTimeOffset? NextBefore);
+    public record SettlementExpensePage(SettlementInfo Settlement, List<ExpenseInfo> Expenses, bool HasMoreExpenses, DateTimeOffset? NextBefore);
     public record SettlementSuggestion(
         Guid FromUserId,
         string FromUserName,
