@@ -1,8 +1,11 @@
 ﻿param(
     [switch]$NoRestore,
     [switch]$SkipDocker,
+    [switch]$WithTestDatabase,
     [switch]$Background,
+    [switch]$NoLaunchBrowser,
     [string]$ApiUrl = "http://localhost:8080",
+    [string]$LaunchPath = "swagger",
     [string]$LogPrefix = "api-local"
 )
 
@@ -16,6 +19,72 @@ function Require-Command {
 
     if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
         Write-Error "$Name is not installed or not on PATH."
+    }
+}
+
+function Get-LaunchUrl {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BaseUrl,
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        return $BaseUrl
+    }
+
+    if ($Path -match "^https?://") {
+        return $Path
+    }
+
+    return "$($BaseUrl.TrimEnd('/'))/$($Path.TrimStart('/'))"
+}
+
+function Start-BrowserWhenReady {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Url
+    )
+
+    if ($NoLaunchBrowser) {
+        return
+    }
+
+    Write-Host "Swagger will open at $Url when the API is ready..."
+    Start-Job -Name "MambaSplitApiSwaggerLauncher" -ScriptBlock {
+        param([string]$ReadyUrl)
+
+        for ($attempt = 1; $attempt -le 60; $attempt++) {
+            try {
+                Invoke-WebRequest -Uri $ReadyUrl -UseBasicParsing -TimeoutSec 2 | Out-Null
+                Start-Process $ReadyUrl
+                return
+            }
+            catch {
+                Start-Sleep -Seconds 1
+            }
+        }
+    } -ArgumentList $Url | Out-Null
+}
+
+function Ensure-PostgresDatabase {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$DatabaseName
+    )
+
+    $exists = docker exec mambasplit_db psql -U mambasplit -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$DatabaseName'"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Unable to check for Postgres database '$DatabaseName'."
+    }
+
+    if ($exists -ne "1") {
+        Write-Host "Creating Postgres database $DatabaseName..."
+        docker exec mambasplit_db psql -U mambasplit -d postgres -c "CREATE DATABASE $DatabaseName" | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Unable to create Postgres database '$DatabaseName'."
+        }
     }
 }
 
@@ -66,6 +135,10 @@ if (-not $SkipDocker) {
         Write-Host "Starting Postgres container (docker compose up -d db)..."
         docker compose up -d db
     }
+
+    if ($WithTestDatabase) {
+        Ensure-PostgresDatabase -DatabaseName "mambasplit_test"
+    }
 }
 
 try {
@@ -86,6 +159,9 @@ if ($portInUse) {
 
 $env:ASPNETCORE_ENVIRONMENT = "Development"
 $env:ASPNETCORE_URLS = $ApiUrl
+if ($WithTestDatabase) {
+    $env:MAMBASPLIT_TEST_POSTGRES_CONNECTION = "Host=localhost;Port=5432;Database=mambasplit_test;Username=mambasplit;Password=mambasplit"
+}
 
 # Avoid Event Log permission issues in restricted shells.
 $env:Logging__EventLog__LogLevel__Default = "None"
@@ -95,7 +171,11 @@ if ($NoRestore) {
     $dotnetArgs += "--no-restore"
 }
 
+$launchUrl = Get-LaunchUrl -BaseUrl $ApiUrl -Path $LaunchPath
+
 Write-Host "Starting API with local profile on $ApiUrl..."
+Start-BrowserWhenReady -Url $launchUrl
+
 if ($Background) {
     $logsDir = Join-Path $repoRoot "logs"
     New-Item -ItemType Directory -Path $logsDir -Force | Out-Null
@@ -116,6 +196,7 @@ if ($Background) {
     Write-Host "PID: $($proc.Id)"
     Write-Host "stdout: $outLog"
     Write-Host "stderr: $errLog"
+    Write-Host "Swagger: $launchUrl"
     exit 0
 }
 

@@ -1,24 +1,20 @@
 using MambaSplit.Api.Data;
 using MambaSplit.Api.Services;
+using MambaSplit.Api.Tests.TestSupport;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Npgsql;
 
 namespace MambaSplit.Api.Tests.Integration;
 
 internal sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 {
-    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"mambasplit-tests-{Guid.NewGuid():N}.db");
-    private readonly string _postgresSchema = $"test_{Guid.NewGuid():N}";
-    private readonly object _postgresInitLock = new();
+    private readonly PostgresTestDatabase _database = new();
     private readonly Func<EmailSendMessage, EmailSendResult>? _emailResultFactory;
     private readonly IList<EmailSendMessage>? _sentMessages;
-    private readonly TestDatabaseProvider _databaseProvider = TestDatabaseProviderSettings.GetProvider();
-    private bool _postgresSchemaInitialized;
 
     public CustomWebApplicationFactory(
         Func<EmailSendMessage, EmailSendResult>? emailResultFactory = null,
@@ -28,11 +24,9 @@ internal sealed class CustomWebApplicationFactory : WebApplicationFactory<Progra
         _sentMessages = sentMessages;
     }
 
-    public string DatabasePath => _databasePath;
-
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        var connectionString = BuildConnectionString();
+        var connectionString = _database.ConnectionString;
         builder.UseEnvironment("Test");
         builder.ConfigureAppConfiguration((_, configBuilder) =>
         {
@@ -67,15 +61,8 @@ internal sealed class CustomWebApplicationFactory : WebApplicationFactory<Progra
 
             services.AddDbContext<AppDbContext>((_, options) =>
             {
-                if (_databaseProvider == TestDatabaseProvider.Postgres)
-                {
-                    EnsurePostgresSchemaInitialized(connectionString);
-                    options.UseNpgsql(connectionString);
-                }
-                else
-                {
-                    options.UseSqlite(connectionString);
-                }
+                _database.EnsureCreated();
+                options.UseNpgsql(connectionString);
             });
 
             if (_emailResultFactory is not null)
@@ -88,84 +75,12 @@ internal sealed class CustomWebApplicationFactory : WebApplicationFactory<Progra
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing && _databaseProvider == TestDatabaseProvider.Postgres)
+        if (disposing)
         {
-            DropPostgresSchema();
+            _database.Dispose();
         }
 
         base.Dispose(disposing);
-    }
-
-    private string BuildConnectionString()
-    {
-        if (_databaseProvider == TestDatabaseProvider.Postgres)
-        {
-            var baseConnectionString = TestDatabaseProviderSettings.GetPostgresConnectionString();
-            var builder = new NpgsqlConnectionStringBuilder(baseConnectionString)
-            {
-                SearchPath = _postgresSchema,
-            };
-            return builder.ConnectionString;
-        }
-
-        return $"Data Source={_databasePath}";
-    }
-
-    private void EnsurePostgresSchemaInitialized(string connectionString)
-    {
-        if (_postgresSchemaInitialized)
-        {
-            return;
-        }
-
-        lock (_postgresInitLock)
-        {
-            if (_postgresSchemaInitialized)
-            {
-                return;
-            }
-
-            EnsurePostgresSchema(connectionString);
-            _postgresSchemaInitialized = true;
-        }
-    }
-
-    private void EnsurePostgresSchema(string connectionString)
-    {
-        var adminConnectionBuilder = new NpgsqlConnectionStringBuilder(connectionString)
-        {
-            SearchPath = string.Empty,
-        };
-        using var connection = new NpgsqlConnection(adminConnectionBuilder.ConnectionString);
-        connection.Open();
-
-        using var command = connection.CreateCommand();
-        command.CommandText = $"drop schema if exists \"{_postgresSchema}\" cascade; create schema \"{_postgresSchema}\";";
-        command.ExecuteNonQuery();
-
-        var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql(connectionString)
-            .Options;
-        using var db = new AppDbContext(dbOptions);
-        var createScript = db.Database.GenerateCreateScript();
-
-        using var createCommand = connection.CreateCommand();
-        createCommand.CommandText = $"set search_path to \"{_postgresSchema}\"; {createScript}";
-        createCommand.ExecuteNonQuery();
-    }
-
-    private void DropPostgresSchema()
-    {
-        var builder = new NpgsqlConnectionStringBuilder(TestDatabaseProviderSettings.GetPostgresConnectionString())
-        {
-            SearchPath = string.Empty,
-        };
-
-        using var connection = new NpgsqlConnection(builder.ConnectionString);
-        connection.Open();
-        using var command = connection.CreateCommand();
-        command.CommandText = $"drop schema if exists \"{_postgresSchema}\" cascade;";
-        command.ExecuteNonQuery();
     }
 
     private sealed class RecordingEmailSender : IEmailSender
@@ -193,32 +108,5 @@ internal sealed class CustomWebApplicationFactory : WebApplicationFactory<Progra
 
             return Task.FromResult(_resultFactory(message));
         }
-    }
-}
-
-internal enum TestDatabaseProvider
-{
-    Sqlite,
-    Postgres,
-}
-
-internal static class TestDatabaseProviderSettings
-{
-    private const string ProviderEnvironmentVariable = "MAMBASPLIT_TEST_DB_PROVIDER";
-    private const string PostgresConnectionEnvironmentVariable = "MAMBASPLIT_TEST_POSTGRES_CONNECTION";
-    private const string DefaultPostgresConnectionString = "Host=localhost;Port=5432;Database=mambasplit_test;Username=mambasplit;Password=mambasplit";
-
-    public static TestDatabaseProvider GetProvider()
-    {
-        var rawValue = Environment.GetEnvironmentVariable(ProviderEnvironmentVariable);
-        return string.Equals(rawValue, "postgres", StringComparison.OrdinalIgnoreCase)
-            ? TestDatabaseProvider.Postgres
-            : TestDatabaseProvider.Sqlite;
-    }
-
-    public static string GetPostgresConnectionString()
-    {
-        return Environment.GetEnvironmentVariable(PostgresConnectionEnvironmentVariable)
-            ?? DefaultPostgresConnectionString;
     }
 }

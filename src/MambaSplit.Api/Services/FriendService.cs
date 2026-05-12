@@ -159,12 +159,23 @@ public class FriendService
             .ThenByDescending(fc => fc.Status == "Connected" ? fc.LastUsedAtUtc : fc.CreatedAtUtc)
             .ToList();
 
+        var connectedFriendIds = sorted
+            .Where(fc => fc.FriendUserId.HasValue)
+            .Select(fc => fc.FriendUserId!.Value)
+            .Distinct()
+            .ToList();
+
+        var summaries = connectedFriendIds.Count > 0
+            ? await ComputeBatchSummariesAsync(ownerUserId, connectedFriendIds, ct)
+            : new Dictionary<Guid, (long NetBalanceCents, int SharedGroupCount, bool HasActiveBalances)>();
+
         var result = new List<FriendListItem>();
         foreach (var fc in sorted)
         {
-            var (netBalanceCents, sharedGroupCount, hasActiveBalances) = fc.FriendUserId.HasValue
-                ? await ComputeSummaryAsync(ownerUserId, fc.FriendUserId.Value, ct)
-                : (0L, 0, false);
+            var (netBalanceCents, sharedGroupCount, hasActiveBalances) =
+                fc.FriendUserId.HasValue && summaries.TryGetValue(fc.FriendUserId.Value, out var summary)
+                    ? summary
+                    : (0L, 0, false);
 
             var friendDisplayName = fc.DisplayName;
             var netBalanceLabel = FormatBalanceLabel(netBalanceCents, friendDisplayName);
@@ -225,12 +236,117 @@ public class FriendService
             sharedGroups);
     }
 
-    private async Task<(long NetBalanceCents, int SharedGroupCount, bool HasActiveBalances)>
-        ComputeSummaryAsync(Guid userA, Guid userB, CancellationToken ct)
+    private async Task<Dictionary<Guid, (long NetBalanceCents, int SharedGroupCount, bool HasActiveBalances)>>
+        ComputeBatchSummariesAsync(Guid ownerUserId, List<Guid> friendUserIds, CancellationToken ct)
     {
-        var (groups, netBalance) = await ComputePerGroupBalancesAsync(userA, userB, ct);
-        var hasActive = groups.Any(g => g.BalanceCents != 0);
-        return (netBalance, groups.Count, hasActive);
+        var ownerGroupIds = await _db.GroupMembers
+            .Where(m => m.UserId == ownerUserId)
+            .Select(m => m.GroupId)
+            .ToListAsync(ct);
+
+        if (ownerGroupIds.Count == 0)
+            return friendUserIds.ToDictionary(id => id, _ => (0L, 0, false));
+
+        var friendMemberships = await _db.GroupMembers
+            .Where(m => friendUserIds.Contains(m.UserId) && ownerGroupIds.Contains(m.GroupId))
+            .Select(m => new { m.UserId, m.GroupId })
+            .ToListAsync(ct);
+
+        var sharedGroupsByFriend = friendMemberships
+            .GroupBy(m => m.UserId)
+            .ToDictionary(g => g.Key, g => g.Select(m => m.GroupId).ToList());
+
+        var allSharedGroupIds = friendMemberships
+            .Select(m => m.GroupId)
+            .Distinct()
+            .ToList();
+
+        if (allSharedGroupIds.Count == 0)
+            return friendUserIds.ToDictionary(id => id, _ => (0L, 0, false));
+
+        var relevantUserIds = new HashSet<Guid>(friendUserIds) { ownerUserId };
+
+        var expenses = await _db.Expenses
+            .Where(e => allSharedGroupIds.Contains(e.GroupId) && relevantUserIds.Contains(e.PayerUserId))
+            .Select(e => new { e.Id, e.GroupId, e.PayerUserId })
+            .ToListAsync(ct);
+
+        var expenseIds = expenses.Select(e => e.Id).ToList();
+
+        var splits = await _db.ExpenseSplits
+            .Where(s => expenseIds.Contains(s.ExpenseId) && relevantUserIds.Contains(s.UserId))
+            .Select(s => new { s.ExpenseId, s.UserId, s.AmountOwedCents })
+            .ToListAsync(ct);
+
+        var settlements = await _db.Settlements
+            .Where(s => allSharedGroupIds.Contains(s.GroupId)
+                && (s.FromUserId == ownerUserId || s.ToUserId == ownerUserId)
+                && (friendUserIds.Contains(s.FromUserId) || friendUserIds.Contains(s.ToUserId)))
+            .Select(s => new { s.GroupId, s.FromUserId, s.ToUserId, s.AmountCents })
+            .ToListAsync(ct);
+
+        var expensesByGroup = expenses
+            .GroupBy(e => e.GroupId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var splitsByExpense = splits
+            .GroupBy(s => s.ExpenseId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var settlementsByGroup = settlements
+            .GroupBy(s => s.GroupId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var result = new Dictionary<Guid, (long NetBalanceCents, int SharedGroupCount, bool HasActiveBalances)>();
+
+        foreach (var friendId in friendUserIds)
+        {
+            if (!sharedGroupsByFriend.TryGetValue(friendId, out var friendGroupIds))
+            {
+                result[friendId] = (0L, 0, false);
+                continue;
+            }
+
+            long netBalance = 0;
+            var hasActive = false;
+
+            foreach (var groupId in friendGroupIds)
+            {
+                long groupBalance = 0;
+
+                var groupExpenses = expensesByGroup.GetValueOrDefault(groupId, []);
+                foreach (var expense in groupExpenses)
+                {
+                    var expenseSplits = splitsByExpense.GetValueOrDefault(expense.Id, []);
+                    if (expense.PayerUserId == ownerUserId)
+                    {
+                        var friendSplit = expenseSplits.FirstOrDefault(s => s.UserId == friendId);
+                        if (friendSplit is not null) groupBalance += friendSplit.AmountOwedCents;
+                    }
+                    else if (expense.PayerUserId == friendId)
+                    {
+                        var ownerSplit = expenseSplits.FirstOrDefault(s => s.UserId == ownerUserId);
+                        if (ownerSplit is not null) groupBalance -= ownerSplit.AmountOwedCents;
+                    }
+                }
+
+                var groupSettlements = settlementsByGroup.GetValueOrDefault(groupId, []);
+                foreach (var settlement in groupSettlements)
+                {
+                    if (settlement.FromUserId == ownerUserId && settlement.ToUserId == friendId)
+                        groupBalance += settlement.AmountCents;
+                    else if (settlement.FromUserId == friendId && settlement.ToUserId == ownerUserId)
+                        groupBalance -= settlement.AmountCents;
+                }
+
+                netBalance += groupBalance;
+                if (groupBalance != 0) hasActive = true;
+            }
+
+            result[friendId] = (netBalance, friendGroupIds.Count, hasActive);
+        }
+
+        return result;
     }
 
     /// <summary>
@@ -283,6 +399,14 @@ public class FriendService
                     || (s.FromUserId == userB && s.ToUserId == userA)))
             .ToListAsync(ct);
 
+        var expensesByGroup = expenses
+            .GroupBy(e => e.GroupId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var settlementsByGroup = settlements
+            .GroupBy(s => s.GroupId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var result = new List<SharedGroupBalance>();
         long totalNet = 0;
 
@@ -291,7 +415,7 @@ public class FriendService
             long groupBalance = 0;
 
             // Expenses: for each expense in this group, compute the net between userA and userB.
-            var groupExpenses = expenses.Where(e => e.GroupId == groupId).ToList();
+            var groupExpenses = expensesByGroup.GetValueOrDefault(groupId, []);
             foreach (var expense in groupExpenses)
             {
                 var expenseSplits = splitsByExpense.GetValueOrDefault(expense.Id, new List<ExpenseSplitEntity>());
@@ -318,7 +442,7 @@ public class FriendService
             }
 
             // Settlements between users in this group
-            var groupSettlements = settlements.Where(s => s.GroupId == groupId).ToList();
+            var groupSettlements = settlementsByGroup.GetValueOrDefault(groupId, []);
             foreach (var settlement in groupSettlements)
             {
                 if (settlement.FromUserId == userA && settlement.ToUserId == userB)

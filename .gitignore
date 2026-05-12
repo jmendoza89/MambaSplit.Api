@@ -24,3 +24,5 @@ Thumbs.db
 /artifacts/
 src/MambaSplit.Api/appsettings.local.json
 src/MambaSplit.Api/appsettings.local.example.json
+scripts/clear-settlement.sql
+scripts/seed-lovenest-local.sql
