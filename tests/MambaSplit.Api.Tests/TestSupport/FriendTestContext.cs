@@ -1,6 +1,5 @@
 ﻿using MambaSplit.Api.Data;
 using MambaSplit.Api.Services;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -9,37 +8,37 @@ namespace MambaSplit.Api.Tests.TestSupport;
 
 internal sealed class FriendTestContext : IAsyncDisposable
 {
-    private readonly SqliteConnection _connection;
+    private readonly PostgresTestDatabase _database;
     public AppDbContext Db { get; }
     public FriendService FriendService { get; }
 
-    private FriendTestContext(SqliteConnection connection, AppDbContext db, FriendService friendService)
+    private FriendTestContext(PostgresTestDatabase database, AppDbContext db, FriendService friendService)
     {
-        _connection = connection;
+        _database = database;
         Db = db;
         FriendService = friendService;
     }
 
     public static async Task<FriendTestContext> CreateAsync()
     {
-        var connection = new SqliteConnection("Data Source=:memory:");
-        await connection.OpenAsync();
+        var database = new PostgresTestDatabase();
+        database.EnsureCreated();
 
         var dbOptions = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite(connection)
+            .UseNpgsql(database.ConnectionString)
             .Options;
         var db = new AppDbContext(dbOptions);
-        await db.Database.EnsureCreatedAsync();
 
         var logger = new Mock<ILogger<FriendService>>();
         var friendService = new FriendService(db, logger.Object);
 
-        return new FriendTestContext(connection, db, friendService);
+        await Task.CompletedTask;
+        return new FriendTestContext(database, db, friendService);
     }
 
     public async ValueTask DisposeAsync()
     {
         await Db.DisposeAsync();
-        await _connection.DisposeAsync();
+        _database.Dispose();
     }
 }
