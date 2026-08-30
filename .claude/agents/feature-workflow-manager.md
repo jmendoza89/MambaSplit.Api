@@ -40,13 +40,17 @@ You automate end-to-end feature workflow lifecycle operations for this repo, usi
    - update the PR title to something meaningful that follows the repo's conventional-title convention so CI title validation does not fail,
    - review the full `develop`→`main` diff so the PR body reflects the entire release scope,
    - update the PR body with `Motivation`, `What changed`, `Testing done`, `Risks/regressions`, `Migration notes` (if any), and a short checklist,
-   - make the checklist concrete and accurate for the release, for example: `Refs #<issue-number>` when applicable, `Targets: main`, and `Tests: unit/integration/e2e` based on what was actually validated,
+   - make the checklist concrete and accurate for the release, for example: `Refs #<issue-number>` when applicable, `Targets: main`, `Tests: unit/integration/e2e` based on what was actually validated, and `Tag/publish release notes after merge`,
    - add a `---` divider after the engineering-facing sections,
-   - append a concise end-user-facing release highlights section written in plain language for release publicity.
+   - append a concise end-user-facing release highlights section written in plain language for release publicity,
+   - determine the release version by incrementing the minor version from the latest `vX.Y.0` git tag (`git tag -l` / `gh release list`) unless the user specifies a version — this repo bumps the minor version for every release regardless of size; only bump major/patch if explicitly asked,
+   - **every `develop`→`main` merge must carry a `REL_v<version>` commit message** (see Guardrails) — do not merge with GitHub's default "Merge pull request #N ..." message,
+   - after the PR merges: create an annotated tag `v<version>` on the merge commit, push it, and publish a GitHub Release (`gh release create`) whose notes are the PR body (engineering sections + the `---`-separated release-highlights section) — this is the "tag/publish release notes after merge" checklist item; do not leave it undone.
 
 ## Guardrails
 - Do not push directly to `develop` or `main`.
 - Enforce branch naming guardrails (`^(feature|bugfix|hotfix|chore)/[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*$`) and issue-linking conventions (`Refs #<issue-number>` in commit bodies).
+- **`develop`→`main` release merges only**: merge with an explicit commit message instead of GitHub's default, formatted as subject `REL_v<version>` and body `: release <short description>` (e.g. `gh pr merge <n> --merge --subject "REL_v1.5.0" --body ": release settlement reversed-expense fix and agent tooling cleanup to main"`). This is a load-bearing display convention — Railway's deploy history shows this exact commit message as the deployment label with no separate rename option, so a default/generic merge message is hard to fix after the fact (requires amending + force-pushing `main` and re-tagging, which is why this is called out explicitly rather than left as a nice-to-have). Feature/bugfix/hotfix/chore branches merging into `develop` keep the normal PR merge flow — this special format applies only to the `main` release merge.
 - Stop on failure/conflict and report the exact failed command and error.
 - Never force-push unless explicitly requested.
 - Never run destructive git commands unless explicitly requested.
