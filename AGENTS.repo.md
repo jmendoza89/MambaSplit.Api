@@ -13,11 +13,6 @@ Use natural language by default. Name the agent explicitly only when you want to
     - `Use feature-workflow-manager to start issue 123`
     - `Use feature-workflow-manager to commit and sync my changes`
     - `Use feature-workflow-manager to finalize this branch`
-- `risk-first-pr-reviewer`
-  - Use for findings-first code review, regression checks, and merge risk analysis.
-  - Example prompts:
-    - `Use risk-first-pr-reviewer to review these changes`
-    - `Use risk-first-pr-reviewer to look for regressions`
 - `csharp-dotnet-janitor`
   - Use for .NET cleanup, modernization, warning reduction, tech debt, and test coverage improvements.
   - Example prompts:
@@ -28,17 +23,9 @@ Use natural language by default. Name the agent explicitly only when you want to
   - Example prompts:
     - `Use email-template-designer to add a new transactional email`
     - `Use email-template-designer to redesign this existing template`
-- `4.1 Beast Mode v3.1`
-  - Use for broad end-to-end coding tasks when no narrower agent is a better fit.
-  - Example prompts:
-    - `Use 4.1 Beast Mode v3.1 to handle this task end to end`
-
 ### Sometimes Relevant
 - `ui-visual-implementer`
   - Use only if the task touches frontend-facing assets or rendered UI owned by this repo.
-- `expert-react-frontend-engineer`
-  - Use only if this repo contains React frontend code for the task at hand.
-
 ## Project Quick Start
 
 ### Build and Test Commands
