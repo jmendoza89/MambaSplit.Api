@@ -85,6 +85,7 @@ Export a versioned OpenAPI snapshot:
 - Prefer async service methods; pass `CancellationToken` through call chains where the signature already supports it.
 - New schema change → new migration file; never edit an already-applied `V{n}` migration.
 - Branch model: `main` (production) and `develop` (integration). Feature/bugfix/hotfix/chore branches are cut from `develop` and PR back into `develop`; `develop` promotes to `main` via PR. `main` only accepts PRs whose source branch is `develop` (enforced by `.github/workflows/restrict-main-merges.yml`) — never push directly to `main`.
+- `develop`→`main` release merges must use an explicit commit message — subject `REL_v<version>`, body `: release <short description>` — instead of GitHub's default "Merge pull request #N ..." text. Railway's deploy history displays this exact commit message as the deployment's label with no separate rename option, so getting it wrong means amending + force-pushing `main` and re-tagging to fix after the fact. Version bumps the minor version (`vX.Y.0`) for every release by default, regardless of size.
 - Branch naming: `^(feature|bugfix|hotfix|chore)/[0-9]+-[a-z0-9]+(?:-[a-z0-9]+)*$`.
 - Commits on issue-numbered branches must include `Refs #<issue-number>` in the commit body.
 - PR titles are enforced by `.github/workflows/semantic-pr-title.yml` (conventional-commit style: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`, `revert`; scope optional).
