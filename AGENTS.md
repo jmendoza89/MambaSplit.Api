@@ -93,8 +93,6 @@ Branch protection requirements for `main` should also include:
 ## Custom Agent Catalog
 - Combined workflow agent:
   - feature-workflow-manager
-- Review agent:
-  - risk-first-pr-reviewer
 - Frontend visual implementation agent:
   - ui-visual-implementer
 - Email template design agent:
@@ -104,7 +102,6 @@ Branch protection requirements for `main` should also include:
 
 ## Startup and Test Defaults
 - Prefer project-provided scripts if present.
-- For Java projects, prefer wrapper commands (`mvnw`, `gradlew`) over global installs.
 - For local infra, verify Docker daemon before running compose commands.
 - Before committing in consuming repositories, run `./scripts/sync-agents.ps1` to sync `.github/agents` from `agent-templates/agents`.
 
@@ -182,8 +179,8 @@ Branch protection requirements for `main` should also include:
 ### PowerShell File Operations
 Correct approach:
 ```powershell
-Get-Content "C:\full\path\to\file.java" | Select-Object -First 50
-Get-Content "C:\full\path\to\file.java" | Select-Object -Skip 50 -First 100
+Get-Content "C:\full\path\to\file.cs" | Select-Object -First 50
+Get-Content "C:\full\path\to\file.cs" | Select-Object -Skip 50 -First 100
 ```
 
 Avoid these approaches:
