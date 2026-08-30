@@ -81,6 +81,8 @@ public class SettlementService
         var candidateExpenses = await _db.Expenses
             .Where(e => e.GroupId == groupId
                 && !alreadyLinkedExpenseIds.Contains(e.Id)
+                && e.ReversalOfExpenseId == null
+                && !_db.Expenses.Any(r => r.ReversalOfExpenseId == e.Id)
                 && (e.PayerUserId == toUserId || e.PayerUserId == fromUserId))
             .Select(e => new { e.Id, e.PayerUserId })
             .ToListAsync(ct);
@@ -94,7 +96,7 @@ public class SettlementService
         var splitsByExpense = splits
             .GroupBy(s => s.ExpenseId)
             .ToDictionary(g => g.Key, g => g.ToList());
-
+ 
         // Only include expenses that actually have a non-zero split for this pair.
         var pairExpenses = candidateExpenses
             .Where(e =>
