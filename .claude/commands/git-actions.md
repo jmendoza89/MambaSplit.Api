@@ -1,11 +1,11 @@
-﻿---
-name: git-actions
-description: "Workspace prompt for generating policy-compliant git branch names, commit messages, and PR artifacts."
-agent: feature-workflow-manager
-model: GPT-4.1 (copilot)
+---
+description: Generate policy-compliant git branch names, commit messages, and PR artifacts, or run a risk-first review of a PR/diff.
+argument-hint: [branch_name|commit_message|pr_body|review_short|review_detailed] <context>
 ---
 
-Use when: you need a standardized, policy-compliant git artifact (branch name, commit message, PR title/body) or a risk-first review of a PR/diff.
+Requested action and context: $ARGUMENTS
+
+For multi-step branch/commit/PR lifecycle work (start an issue branch, commit+sync, finalize a PR, prepare a release), delegate to the `feature-workflow-manager` subagent instead of doing it inline here.
 
 Guidelines:
 - Apply the workspace branch naming guardrails:
@@ -17,7 +17,7 @@ Guidelines:
 - For `pr_body` include: Motivation, What changed, Testing done, Risks/regressions, Migration notes (if any), and a short checklist (e.g., `Refs #<issue-number>`, `Targets: develop`, `Tests: unit/integration`).
 - For reviews (`review_short`, `review_detailed`) prioritize risk: correctness, security, data integrity, and public API stability. Provide actionable findings and minimal repro steps when possible.
 
-Prompts / Examples:
+Examples:
 - Generate branch name:
   - Input: `action: branch_name`, `context: { type: "feature", issue: 42, title: "Add auto-rebalance when new member joins" }`
   - Output: `feature/42-auto-rebalance-when-new-member-joins`
