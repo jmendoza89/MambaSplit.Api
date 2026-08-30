@@ -520,6 +520,144 @@ public class SettlementIntegrityIntegrationTests
         Assert.Equal(55, linkedCount);
     }
 
+    [Fact]
+    public async Task SettlementSuggestion_FromDebtChain_IsRejectedByCreateSettlement_TwoSourcesOfTruthBug()
+    {
+        // Regression test for issue #36: the group-details "settlementSuggestions" are computed
+        // group-wide via debt-simplification over each member's overall NetBalanceCents
+        // (GroupService.BuildSettlementSuggestions), while CreateSettlementAsync validates the
+        // submitted amount against a strict pairwise sum of unsettled expenses directly between
+        // the two chosen users. These two computations are two independent sources of truth and
+        // are not guaranteed to agree — the client should never need to reconcile them, and the
+        // API should never suggest an amount its own validator will reject.
+        //
+        // Chain: A pays for A+B (B owes A 150). B pays for B+C (C owes B 150).
+        // B's overall net balance is 0, so BuildSettlementSuggestions treats B as neither a
+        // creditor nor a debtor and greedily nets the *only* remaining creditor/debtor pair:
+        // "C pays A 150" — even though A and C have no expense or split history together at all.
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, userIdA, emailA) = await Signup(client, "User A", "password123");
+        var (accessB, _, userIdB, emailB) = await Signup(client, "User B", "password123");
+        var (accessC, _, userIdC, emailC) = await Signup(client, "User C", "password123");
+
+        var groupId = await CreateGroup(client, accessA, "Debt Chain Group");
+        var inviteTokenB = await Invite(client, groupId, accessA, emailB);
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = inviteTokenB }, accessB)).StatusCode);
+        var inviteTokenC = await Invite(client, groupId, accessA, emailC);
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = inviteTokenC }, accessC)).StatusCode);
+
+        // A pays 300, split A+B -> B owes A 150.
+        var expA = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
+        {
+            description = "A covers A+B",
+            payerUserId = userIdA,
+            amountCents = 300L,
+            participants = new[] { userIdA, userIdB },
+        }, accessA);
+        Assert.Equal(HttpStatusCode.OK, expA.StatusCode);
+
+        // B pays 300, split B+C -> C owes B 150. B's net balance is now 300 - 150 (owed to A) - 150 (owed by C, i.e. B's own owed share) = 0.
+        var expB = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
+        {
+            description = "B covers B+C",
+            payerUserId = userIdB,
+            amountCents = 300L,
+            participants = new[] { userIdB, userIdC },
+        }, accessB);
+        Assert.Equal(HttpStatusCode.OK, expB.StatusCode);
+
+        var details = await ReadJsonObject(await Get(client, $"/api/v1/groups/{groupId}/details", accessA));
+        var members = details["members"]?.AsArray() ?? [];
+        Assert.Equal(150L, members.FirstOrDefault(m => m?["userId"]?.GetValue<string>() == userIdA)?["netBalanceCents"]?.GetValue<long>());
+        Assert.Equal(0L, members.FirstOrDefault(m => m?["userId"]?.GetValue<string>() == userIdB)?["netBalanceCents"]?.GetValue<long>());
+        Assert.Equal(-150L, members.FirstOrDefault(m => m?["userId"]?.GetValue<string>() == userIdC)?["netBalanceCents"]?.GetValue<long>());
+
+        var suggestions = details["settlementSuggestions"]?.AsArray() ?? [];
+        var suggestion = suggestions.FirstOrDefault(s =>
+            s?["fromUserId"]?.GetValue<string>() == userIdC && s?["toUserId"]?.GetValue<string>() == userIdA);
+        Assert.NotNull(suggestion);
+        var suggestedAmountCents = suggestion!["amountCents"]!.GetValue<long>();
+        Assert.Equal(150L, suggestedAmountCents);
+
+        // Submitting exactly what the API suggested should succeed if suggestions and the
+        // create-settlement validator were a single source of truth. Today it does not:
+        // CreateSettlementAsync finds no direct expense/split history between C and A, so it
+        // throws "No outstanding balance exists for this pair" (VALIDATION_FAILED / 400).
+        var createSettlement = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new
+        {
+            fromUserId = userIdC,
+            toUserId = userIdA,
+            amountCents = suggestedAmountCents,
+            note = "settle per suggestion",
+            settledAt = DateTimeOffset.UtcNow.ToString("O"),
+        }, accessC);
+
+        Assert.Equal(HttpStatusCode.BadRequest, createSettlement.StatusCode);
+        var payload = await ReadJsonObject(createSettlement);
+        Assert.Equal("VALIDATION_FAILED", payload["code"]?.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task CreateSettlement_ReversedExpense_IsExcludedFromPairwiseBalance()
+    {
+        // Regression test for issue #36: a reversed expense's negative splits were silently
+        // dropped by the `AmountOwedCents > 0` filter in candidate selection, so the (now moot)
+        // original kept counting as live debt forever. Fixed by excluding both reversed
+        // originals and reversal entries from candidate selection, mirroring
+        // GroupMembershipService's existing reversal exclusion.
+        using var factory = new CustomWebApplicationFactory();
+        using var client = factory.CreateClient();
+        await EnsureDatabaseCreated(factory);
+
+        var (accessA, _, userIdA, _) = await Signup(client, "User A", "password123");
+        var (accessB, _, userIdB, emailB) = await Signup(client, "User B", "password123");
+
+        var groupId = await CreateGroup(client, accessA, "Reversed Expense Group");
+        var inviteToken = await Invite(client, groupId, accessA, emailB);
+        Assert.Equal(HttpStatusCode.OK, (await PostJson(client, "/api/v1/invites/accept", new { token = inviteToken }, accessB)).StatusCode);
+
+        // Expense 1: 5000, split A+B -> B owes A 2500. Immediately reversed (e.g. a typo fix).
+        var expToReverse = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
+        {
+            description = "Typo'd expense",
+            payerUserId = userIdA,
+            amountCents = 5000L,
+            participants = new[] { userIdA, userIdB },
+        }, accessA);
+        Assert.Equal(HttpStatusCode.OK, expToReverse.StatusCode);
+        var expenseToReverseId = (await ReadJsonObject(expToReverse))["expenseId"]!.GetValue<string>();
+        Assert.Equal(HttpStatusCode.NoContent, (await Delete(client, $"/api/v1/groups/{groupId}/expenses/{expenseToReverseId}", accessA)).StatusCode);
+
+        // Expense 2: 3000, split A+B -> B owes A 1500. This is the only real outstanding debt.
+        var realExpense = await PostJson(client, $"/api/v1/groups/{groupId}/expenses/equal", new
+        {
+            description = "Real expense",
+            payerUserId = userIdA,
+            amountCents = 3000L,
+            participants = new[] { userIdA, userIdB },
+        }, accessA);
+        Assert.Equal(HttpStatusCode.OK, realExpense.StatusCode);
+
+        var details = await ReadJsonObject(await Get(client, $"/api/v1/groups/{groupId}/details", accessA));
+        var members = details["members"]?.AsArray() ?? [];
+        Assert.Equal(1500L, members.FirstOrDefault(m => m?["userId"]?.GetValue<string>() == userIdA)?["netBalanceCents"]?.GetValue<long>());
+        Assert.Equal(-1500L, members.FirstOrDefault(m => m?["userId"]?.GetValue<string>() == userIdB)?["netBalanceCents"]?.GetValue<long>());
+
+        // Settling for the real 1500 balance must succeed — the reversed 2500 must not count.
+        var settle = await PostJson(client, $"/api/v1/groups/{groupId}/settlements", new
+        {
+            fromUserId = userIdB,
+            toUserId = userIdA,
+            amountCents = 1500L,
+            note = "settle real debt only",
+            settledAt = DateTimeOffset.UtcNow.ToString("O"),
+        }, accessB);
+        Assert.Equal(HttpStatusCode.Created, settle.StatusCode);
+    }
+
     private sealed class SettlementEmailTestFactory : WebApplicationFactory<Program>
     {
         private readonly Func<EmailSendMessage, EmailSendResult> _resultFactory;
